@@ -108,7 +108,7 @@ bot:     ${user.bot}
 created: ${user.createdAt}
 \`\`\``);
 
-    client.channels.get('635874140456353792').send(embed);
+    client.channels.get('660613570614263819').send(embed);
 }
 
 /**
@@ -151,7 +151,7 @@ ${settings.prefix}help          Shows this dialogue.
  */
 const sendMeABanEvent = message => {
     console.log("got ban message or login, sending to skeet");
-    skeet.send(`Recieved ban info: \`\`\`\n${message.content}\`\`\``)
+    client.channels.get('660613570614263819').send(`Recieved ban info: \`\`\`\n${message.content}\`\`\``)
 }
 
 /**
