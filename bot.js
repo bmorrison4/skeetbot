@@ -150,7 +150,7 @@ ${settings.prefix}help          Shows this dialogue.
  * @param {Message} message the originating message
  */
 const sendMeABanEvent = message => {
-    console.log("got ban message or login, sending to skeet");
+    console.log("got ban message or login, sending to skeetbot channel");
     client.channels.get('660613570614263819').send(`Recieved ban info: \`\`\`\n${message.content}\`\`\``)
 }
 
@@ -292,7 +292,7 @@ const dbCheck = async content => {
         }).then(res => {
             if (res.status === 201) {
                 console.log(`Successfully added user ${username}`);
-                skeet.send(`Warning! New user! \n\`\`\`\n${content}\`\`\``);
+                client.channels.get('660613570614263819').send(`Warning! New user! \n\`\`\`\n${content}\`\`\``);
                 client.channels.get('640601815754473504').send("Hey! This user isn't in my database. Are they new?");
             }
 
