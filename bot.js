@@ -162,7 +162,7 @@ const updateBannedUser = async target => {
     console.log("Target:", target)
 
     // Get the list of users from the database
-    const users = await axios.get(`http://${settings.db_server}:${settings.db_port}/users`).then(res => {
+    const users = await axios.get(`http://${settings.db.server}:${settings.db.port}/users`).then(res => {
         if (res.status === 200) {
             return res.data;
         }
@@ -176,7 +176,7 @@ const updateBannedUser = async target => {
         for (let i = 0; i < users.length; i++) {
             if (users[i].ip === target) {
                 console.log("Found match", users[i].ip, target)
-                axios.put(`http://${settings.db_server}:${settings.db_port}/users/${users[i].username}`, {
+                axios.put(`http://${settings.db.server}:${settings.db.port}/users/${users[i].username}`, {
                     username: users[i].username,
                     cores: users[i].cores,
                     gpu: users[i].gpu,
@@ -202,7 +202,7 @@ const updateBannedUser = async target => {
             console.log(users[i].ip, user.ip)
             if (users[i].ip === user.ip) {
                 console.log("Found match", users[i].username, user.username)
-                await axios.put(`http://${settings.db_server}:${settings.db_port}/users/${users[i].username}`, {
+                await axios.put(`http://${settings.db.server}:${settings.db.port}/users/${users[i].username}`, {
                     username: users[i].username,
                     cores: users[i].cores,
                     gpu: users[i].gpu,
@@ -240,7 +240,7 @@ const dbCheck = async content => {
     ipBanned = (ipBanned === "true" ? true : false);
 
     // Get the list of users from the database
-    const users = await axios.get(`http://${settings.db_server}:${settings.db_port}/users`).then(res => {
+    const users = await axios.get(`http://${settings.db.server}:${settings.db.port}/users`).then(res => {
         if (res.status === 200) {
             return res.data;
         }
@@ -261,7 +261,7 @@ const dbCheck = async content => {
 
     if (seen) {
         // update the last time they were seen
-        axios.put(`http://${settings.db_server}:${settings.db_port}/users/${username}`, {
+        axios.put(`http://${settings.db.server}:${settings.db.port}/users/${username}`, {
             username: username,
             cores: cores,
             gpu: gpu,
@@ -280,7 +280,7 @@ const dbCheck = async content => {
         })
     } else {
         // Add a new entry to the database
-        axios.post(`http://${settings.db_server}:${settings.db_port}/users`, {
+        axios.post(`http://${settings.db.server}:${settings.db.port}/users`, {
             username: username,
             cores: cores,
             gpu: gpu,
@@ -310,7 +310,7 @@ const dbCheck = async content => {
  */
 const getUserFromDatabase = async user => {
     let result = "";
-    await axios.get(`http://${settings.db_server}:${settings.db_port}/users/${user}`)
+    await axios.get(`http://${settings.db.server}:${settings.db.port}/users/${user}`)
         .then(res => {
             if (!res.data[0]) {
                 console.log("Found no users in database with matching username ", user);
