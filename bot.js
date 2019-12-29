@@ -5,7 +5,7 @@ const os = require('os');
 const settings = require('./settings.json');
 
 const client = new Client();
-let skeet = {};
+// let skeet = {};
 
 /**
  * Runs when the bot is ready. All discord reliant varialbes need to be 
@@ -13,7 +13,7 @@ let skeet = {};
  * @async
  */
 client.once("ready", async () => {
-    skeet = client.users.get("284468812319817730");
+    // skeet = client.users.get("284468812319817730");
 
     client.user.setPresence({
         game: {
@@ -151,7 +151,11 @@ ${settings.prefix}help          Shows this dialogue.
  */
 const sendMeABanEvent = message => {
     console.log("got ban message or login, sending to skeetbot channel");
-    client.channels.get('660613570614263819').send(`Recieved ban info: \`\`\`\n${message.content}\`\`\``)
+    const embed = new RichEmbed()
+        .setTitle("Got Ban Info")
+        .setColor(0xFF0000)
+        .setDescription(message.content);
+    client.channels.get('660613570614263819').send(embed)
 }
 
 /**
@@ -292,7 +296,18 @@ const dbCheck = async content => {
         }).then(res => {
             if (res.status === 201) {
                 console.log(`Successfully added user ${username}`);
-                client.channels.get('660613570614263819').send(`Warning! New user! \n\`\`\`\n${content}\`\`\``);
+                const embed = new RichEmbed()
+                    .setTitle("New Remo user joined")
+                    .setColor(0xFF00FF)
+                    .setDescription(
+                        `Username: ${username}
+Cores: ${cores}
+GPU: ${gpu}
+UA: \`${useragent}\`
+IP: ${ip}
+Username Banned?: ${usernameBanned}
+IP Banned?: ${ipBanned}`);
+                client.channels.get('660613570614263819').send(embed);
                 client.channels.get('640601815754473504').send("Hey! This user isn't in my database. Are they new?");
             }
 
