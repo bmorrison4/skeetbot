@@ -5,6 +5,7 @@ const os = require('os');
 const settings = require('./settings.json');
 
 const client = new Client();
+let botChangedNickname = false;
 // let skeet = {};
 
 /**
@@ -25,6 +26,22 @@ client.once("ready", async () => {
 
     console.log(`Logged in as ${client.user.tag} on ${os.hostname}`);
 });
+
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+    // console.log("OLD MEMBER:\n", oldMember);
+    // console.log("NEW MEMBER:\n", newMember);
+    console.log(newMember._roles)
+    if (!botChangedNickname &&
+        newMember._roles.indexOf('662719620603576322') >= 0 &&
+        oldMember.nickname !== newMember.nickname) {
+        console.log("Got unauthed nickname change. Reverting.");
+        botChangedNickname = true;
+        await newMember.setNickname(oldMember.nickname);
+        botChangedNickname = false;
+    } else if (botChangedNickname) {
+        botChangedNickname = false;
+    }
+})
 
 /**
  * Runs when somebody joins the server.
@@ -69,6 +86,18 @@ client.on("message", async message => {
     // %help - send the help dialogue
     else if (content.startsWith(`${settings.prefix}help`)) {
         sendHelpDialogue(message);
+    }
+
+    else if (content.startsWith(`${settings.prefix}nick`)) {
+        botChangedNickname = true;
+        const user = client.users.get(message.mentions.users.first().id);
+        // console.log(user);
+        if (message.author._roles.indexOf('607300573317824512') >= 0) {
+            console.log("resetting nickname for", user.username);
+            user.setNickname(user.username);
+        } else {
+            console.log("insufficent perms to change nick");
+        }
     }
 
     // Non-callable events
@@ -298,15 +327,16 @@ const dbCheck = async content => {
                 console.log(`Successfully added user ${username}`);
                 const embed = new RichEmbed()
                     .setTitle("New Remo user joined")
-                    .setColor(0xFF00FF)
-                    .setDescription(
-                        `Username: ${username}
-Cores: ${cores}
-GPU: ${gpu}
-UA: \`${useragent}\`
-IP: ${ip}
-Username Banned?: ${usernameBanned}
-IP Banned?: ${ipBanned}`);
+                    .setColor(0xFFFF00)
+                    //                    .setDescription(
+                    //                        `Username: ${username}
+                    //Cores: ${cores}
+                    //GPU: ${gpu}
+                    //UA: \`${useragent}\`
+                    //IP: ${ip}
+                    //Username Banned?: ${usernameBanned}
+                    //IP Banned?: ${ipBanned}`);
+                    .setDescription(content);
                 client.channels.get('660613570614263819').send(embed);
                 client.channels.get('640601815754473504').send("Hey! This user isn't in my database. Are they new?");
             }
@@ -349,13 +379,22 @@ const getUserFromDatabase = async user => {
  */
 const checkIfBanned = async (username, users) => {
     const targetUser = await getUserFromDatabase(username);
-
+    let bannedUsers = [];
     for (let i = 0; i < users.length; i++) {
         if (targetUser.ip === users[i].ip && (users[i].username_banned || users[i].ip_banned)) {
             console.log(`Got banned account ${users[i].username}, ${users[i].username_banned}, ${users[i].ip_banned}, ${users[i].ip}`)
-            client.channels.get('640601815754473504')
-                .send("**WARNING!!!** This Account has connected on an IP that has previously had a banned username or IP.");
+            bannedUsers.push(users[i]);
         }
+    }
+    if (bannedUsers.length > 0) {
+        console.log(bannedUsers);
+        let str = "\n```";
+        for (i in bannedUsers) {
+            str += `${bannedUsers[i].username}: ${bannedUsers[i].username_banned ? "username" : ""} ${bannedUsers[i].ip_banned ? "ip" : ""}\n`
+        }
+        str += "\n```";
+        client.channels.get('640601815754473504')
+            .send(`**WARNING!!!** This Account has connected on an IP that has previously had a banned username or IP. ${str}`);
     }
 }
 
