@@ -15,7 +15,7 @@ let botChangedNickname = false;
  */
 client.once("ready", async () => {
     // skeet = client.users.get("284468812319817730");
-
+    axios.defaults.headers.common['key'] = settings.key;
     client.user.setPresence({
         game: {
             name: "for bad guys",
@@ -30,7 +30,6 @@ client.once("ready", async () => {
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
     // console.log("OLD MEMBER:\n", oldMember);
     // console.log("NEW MEMBER:\n", newMember);
-    console.log(newMember._roles)
     if (!botChangedNickname &&
         newMember._roles.indexOf('662719620603576322') >= 0 &&
         oldMember.nickname !== newMember.nickname) {
@@ -279,15 +278,16 @@ const dbCheck = async content => {
         }
         return [];
     }).catch(err => {
-        console.error(err.data);
+        console.error("ERROR!:",err.data);
     })
+
 
     // Boolean flag to see if the target user exists in the database
     let seen = false;
-    for (let i = 0; i < users.length; i++) {
-        if (users[i].username === username) {
+    for (user of users) {
+        if (user.username === username) {
             seen = true;
-            i = users.length;
+            break;
         }
 
     }
@@ -358,10 +358,10 @@ const getUserFromDatabase = async user => {
     await axios.get(`http://${settings.db.server}:${settings.db.port}/users/${user}`)
         .then(res => {
             if (!res.data[0]) {
-                console.log("Found no users in database with matching username ", user);
+                console.log("Found no users in database with matching username", user);
                 result = { error: "Not Found" };
             } else {
-                console.log("Found username ", user);
+                console.log("Found username", user);
                 result = res.data[0];
             }
         }).catch(err => {
@@ -389,8 +389,8 @@ const checkIfBanned = async (username, users) => {
     if (bannedUsers.length > 0) {
         console.log(bannedUsers);
         let str = "\n```";
-        for (i in bannedUsers) {
-            str += `${bannedUsers[i].username}: ${bannedUsers[i].username_banned ? "username" : ""} ${bannedUsers[i].ip_banned ? "ip" : ""}\n`
+        for (let user of bannedUsers) {
+            str += `${user.username}: ${user.username_banned ? "username" : ""} ${user.ip_banned ? "ip" : ""}\n`
         }
         str += "\n```";
         client.channels.get('640601815754473504')
