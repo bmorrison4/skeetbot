@@ -28,8 +28,6 @@ client.once("ready", async () => {
 });
 
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
-    // console.log("OLD MEMBER:\n", oldMember);
-    // console.log("NEW MEMBER:\n", newMember);
     if (!botChangedNickname &&
         newMember._roles.indexOf('662719620603576322') >= 0 &&
         oldMember.nickname !== newMember.nickname) {
@@ -117,6 +115,19 @@ client.on("message", async message => {
     }
 });
 
+client.on("messageDelete", async message => {
+    const channel = message.channel.name;
+    const author = `${message.author.username}#${message.author.discriminator}`;
+    const content = message.content;
+    const embed = new RichEmbed()
+        .setTitle(`Message deleted in #${channel}`)
+        .setColor(0x009999)
+        .setDescription(
+            `${author}: ${content}`
+        );
+    client.channels.get('660613570614263819').send(embed);
+})
+
 /**
  * Send a RichEmbed to #remo-internal when somebody joins the server.
  * 
@@ -147,8 +158,9 @@ created: ${user.createdAt}
  * @async
  */
 const sendLastSeen = async (message, user) => {
+    console.log(`Trying to get ${user}`)
     const userObj = await getUserFromDatabase(user);
-    if (!user.error) {
+    if (!userObj.error) {
         const lastSeen = new Date(userObj.last_seen);
 
         const lastSeenDate = `${lastSeen.getUTCMonth() + 1}/${lastSeen.getUTCDate()}/${lastSeen.getUTCFullYear()} ${lastSeen.getUTCHours()}:`;
@@ -281,7 +293,6 @@ const dbCheck = async content => {
         console.error("ERROR!:",err.data);
     })
 
-
     // Boolean flag to see if the target user exists in the database
     let seen = false;
     for (user of users) {
@@ -354,6 +365,7 @@ const dbCheck = async content => {
  * @returns {Object} a user object with information gotten from the database
  */
 const getUserFromDatabase = async user => {
+    console.log(`Trying to get ${user} from the database...`)
     let result = "";
     await axios.get(`http://${settings.db.server}:${settings.db.port}/users/${user}`)
         .then(res => {
@@ -378,7 +390,9 @@ const getUserFromDatabase = async user => {
  * @param {Array[User]} users array of users in database
  */
 const checkIfBanned = async (username, users) => {
+    console.log(`Checking if ${username} is banned...`)
     const targetUser = await getUserFromDatabase(username);
+
     let bannedUsers = [];
     for (let i = 0; i < users.length; i++) {
         if (targetUser.ip === users[i].ip && (users[i].username_banned || users[i].ip_banned)) {
@@ -395,6 +409,8 @@ const checkIfBanned = async (username, users) => {
         str += "\n```";
         client.channels.get('640601815754473504')
             .send(`**WARNING!!!** This Account has connected on an IP that has previously had a banned username or IP. ${str}`);
+    } else {
+        console.log("Not banned! :)");
     }
 }
 
