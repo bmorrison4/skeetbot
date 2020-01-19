@@ -6,11 +6,12 @@ const url = `http://${settings.db.server}:${settings.db.port}`;
 
 /**
  * Checks if a user has banned alts
- * @TODO make /banned endpoint in API
+ * @param {String} username the username to test
+ * @async
  */
 module.exports.checkIfBanned = async username => {
     console.log(`Checking if ${username} is banned...`);
-    const targetUser = await this.getUserFromDatabase(username); //
+    const targetUser = await this.getUserFromDatabase(username);
 
     let bannedUsers = []
     try {
@@ -93,7 +94,6 @@ module.exports.dbCheck = async content => {
         }).then(res => {
             if (res.status === 200) {
                 console.log(`Successfully updated user ${username}`);
-                // this.checkIfBanned(username);
             }
         }).catch(err => {
             console.error(err);
@@ -152,21 +152,6 @@ module.exports.getUserFromDatabase = async username => {
     console.log(`Trying to get ${username} from the database...`);
     
     let result = "";
-    /*await axios.get(`${url}/users/${username}`)
-        .then(res => {
-            if (!res.data[0]) {
-                console.log("Found no users in database with matching username:", username);
-                result = { error: "Not found" };
-            } else {
-                console.log("Found username:", res.data[0].username);
-                result = res.data[0];
-            }
-        }).catch(err => {
-            console.error(err);
-            result = { error: err };
-        });
-    */
-
     try {  
         const res = await axios.get(`${url}/users/${username}`)
 
