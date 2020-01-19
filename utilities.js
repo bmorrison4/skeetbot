@@ -1,4 +1,4 @@
-import axios from "axios";
+const axios = require('axios');
 
 const settings = require('./settings.json');
 
@@ -106,7 +106,46 @@ module.exports.updateBannedUser = async target => {
     }
 }
 
-module.exports.checkIfBanned = async (username, users) => {
+/**
+ * Checks if a user has banned alts
+ * @TODO make /banned endpoint in API
+ */
+module.exports.checkIfBanned = async username => {
+    console.log(`Checking if ${username} is banned...`);
+    const targetUser = await this.getUserFromDatabase(username);
+    const bannedUsers = axios.get(`${url}/banned`).then(res => {
+        return res.data;
+    }).catch(err => {
+        console.error("Failed to get banned users", err);
+        return {};
+    })
 
+    if (bannedUsers.length > 0) {
+        let str = "\n```";
+        for (let user of bannedUsers) {
+            if (targetUser.ip === user.ip) {
+                str += `${user.username}: ${user.username_banned ? "username" : ""}\t${user.ip_banned ? "ip" : ""}\n`;
+            }
+        }
+        str += "\n```";
+        return str;
+    } else {
+        console.log(`Not banned! :${username === "jill" ? "]" : ")"}`);
+        return null;
+    }
 }
 
+module.exports.getLastSeen = async user => {
+    console.log("Trying to get last seen time for user:", user);
+    const userObj = await this.getUserFromDatabase(user);
+    if (!userObj.error) {
+        const lastSeen = new Date(userObj.last_seen);
+
+        const lastSeenDate = `${lastSeen.getUTCMonth() + 1}/${lastSeen.getUTCDate()}/${lastSeen.getUTCFullYear()}`
+        const lastSeenTime = `${lastSeen.getUTCHours()}:` + (lastSeen.getMinutes() < 10 ? `0${lastSeen.getUTCMinutes()}` : `${lastSeen.getUTCMinutes()}`)
+
+        return `${lastSeenDate} ${lastSeenTime} UTC`;
+    } else {
+        return userObj.error;
+    }
+}

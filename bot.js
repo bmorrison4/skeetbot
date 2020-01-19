@@ -42,17 +42,17 @@ client.once("ready", async () => {
  * @async
  */
 client.on("guildMemberAdd", async member => {
-    console.log("Guild member joined!", user.tag);
+    console.log("Guild member joined!", member.user.tag);
     const embed = new RichEmbed()
         .setTitle("New user joined")
-        .setColor(0x00FFFF)
+        .setColor(settings.colors.discord.low)
         .setDescription(
-            `${user.username} joined the server.
+            `${member.user.username} joined the server.
 \`\`\`
-tag:        ${user.tag}
-ID:         ${user.id}
-bot:        ${user.bot}
-created:    ${user.createdAt}
+tag:        ${member.user.tag}
+ID:         ${member.user.id}
+bot:        ${member.user.bot}
+created:    ${member.user.createdAt}
 \`\`\``
         )
 
@@ -118,14 +118,47 @@ client.on("messageDelete", async message => {
     const content = message.content;
     const embed = new RichEmbed()
         .setTitle(`Message deleted in #${channel}`)
-        .setColor(0x009999)
+        .setColor(settings.colors.discord.med)
         .setDescription(`${author}: ${content}`);
-    
+
     spamChannel.send(embed);
 })
 
-const sendHelpDialogue = message => {
+/**
+ * Sends the last seen time from the database for a specific user.
+ * 
+ * @param {Message} message the message that triggered the event
+ * @param {String} user the Remo username to get
+ * @async
+ */
+const sendLastSeen = async (message, user) => {
+    const time = utilities.getLastSeen(user);
+    if (!time.error) {
+        message.channel.send(`Last seen: ${time}`)
+    } else {
+        message.channel.send(time.error);
+    }
+}
 
+/**
+ * Sends a help dialogue to the channel where the message was called.
+ * 
+ * @param {Message} message the originating message
+ */
+const sendHelpDialogue = message => {
+    message.channel.send(`\`\`\`
+${settings.prefix}info @user    Show a 'new user joined' embed with the tagged user.
+${settings.prefix}seen user     Shows the last time a Remo user was seen in my database.
+${settings.prefix}help          Shows this dialogue.
+\`\`\``)
+}
+
+const checkForAlts = async username => {
+    const alts = await utilities.checkIfBanned(username);
+
+    if (alts !== null) {
+        adminChannel.send(`**WARNING!!!** This account has suspected banned alts! ${alts}`);
+    }
 }
 
 console.log("Skeetbot starting up!");
