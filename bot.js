@@ -19,7 +19,7 @@ let adminChannel;
  * @async
  */
 client.once("ready", async () => {
-    axios.default.headers.common['key'] = settings.key;
+    axios.defaults.headers.common['key'] = settings.key;
     client.user.setPresence({
         game: {
             name: "for bad buys",
@@ -97,6 +97,7 @@ client.on("message", async message => {
 
     } else if (message.content.startsWith(`${settings.prefix}nick`)) {
         console.log(`Got ${settings.prefix}nick message`);
+        message.reply("Not implemented yet!");
     }
 
     // Non-callable events
@@ -125,19 +126,68 @@ client.on("messageDelete", async message => {
 })
 
 /**
- * Sends the last seen time from the database for a specific user.
- * 
- * @param {Message} message the message that triggered the event
- * @param {String} user the Remo username to get
+ * Checks a remo user for accounts that have been banned on the same ip
+ * @param {String} username the Remo user to test for
  * @async
  */
-const sendLastSeen = async (message, user) => {
-    const time = utilities.getLastSeen(user);
-    if (!time.error) {
-        message.channel.send(`Last seen: ${time}`)
-    } else {
-        message.channel.send(time.error);
+const checkForAlts = async (message, username) => {
+    const alts = await utilities.checkIfBanned(username);
+    console.log(alts);
+    if (alts !== "") {
+        adminChannel.send(`**WARNING!!!** This account has suspected banned alts! ${alts}`);
+        const embed = new RichEmbed()
+            .setTitle("Found Banned Accounts on Connecting IP")
+            .setColor(settings.colors.remo.high)
+            .setDescription(`${message.content}\n${alts}`);
+        spamChannel.send(embed);
     }
+}
+
+/**
+ * Fires when a message is sent in the admin channel. Looks for users logging in
+ * or specific keywords that I've deemed important to know of when uttered.
+ * @param {Message} message the originating message
+ * @async
+ */
+const handleAdminMessage = async message => {
+    if (message.content.includes("true") ||//im so gonna sign up with username true
+        message.content.includes("?ban") ||
+        message.content.includes("GGK")) {
+        sendBanEvent(message);
+        if (message.content.startsWith("?ban")) {
+            const args = message.content.slice(settings.prefix.length).split(/ +/);
+            if (args[1]) {
+                await utilities.updateBannedUser(args[1]);
+            }
+        }
+    } else if (message.content.includes("-------------------------------") &&
+        message.author.username === "RemoBot") {
+        await utilities.dbCheck(message.content);
+        const username = message.content.match(/(?<=\*\*).*(?=\*\*)/)[0];
+        if (await utilities.getUserFromDatabase(username).error === "Not found") { // getUser
+            const embed = new RichEmbed()
+                .setTitle("New Remo User Joined")
+                .setColor(settings.colors.remo.med)
+                .setDescription(message.content);
+            spamChannel.send(embed);
+            adminChannel.send("Hey! This user isn't in my database. Are they new?");
+        }
+        await checkForAlts(message, username); // and getUser run at the same time
+    }
+}
+
+/**
+ * Send a message to the skeetbot channel when a user/ip is banned, or a banned
+ * user logs in
+ * @param {Message} message the originating message
+ */
+const sendBanEvent = message => {
+    console.log("Got ban message or login, sending to skeetbot channel");
+    const embed = new RichEmbed()
+        .setTitle("Got Ban Info")
+        .setColor(settings.colors.remo.high)
+        .setDescription(message.content);
+    spamChannel.send(embed);
 }
 
 /**
@@ -153,11 +203,19 @@ ${settings.prefix}help          Shows this dialogue.
 \`\`\``)
 }
 
-const checkForAlts = async username => {
-    const alts = await utilities.checkIfBanned(username);
-
-    if (alts !== null) {
-        adminChannel.send(`**WARNING!!!** This account has suspected banned alts! ${alts}`);
+/**
+ * Sends the last seen time from the database for a specific user.
+ * 
+ * @param {Message} message the message that triggered the event
+ * @param {String} user the Remo username to get
+ * @async
+ */
+const sendLastSeen = async (message, user) => {
+    const time = utilities.getLastSeen(user);
+    if (!time.error) {
+        message.channel.send(`Last seen: ${time}`)
+    } else {
+        message.channel.send(time.error);
     }
 }
 
