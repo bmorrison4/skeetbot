@@ -408,7 +408,7 @@ const checkIfBanned = async (username, users) => {
         }
         str += "\n```";
         client.channels.get('640601815754473504')
-            .send(`**WARNING!!!** Possible banned accounts on IP! Possible alt. ${str}`);
+            .send(`**WARNING!!!** Banned accounts on IP! Possible alt. ${str}`);
         const embed = new RichEmbed()
             .setTitle('Possible Alternate Account Detected')
             .setColor(0xFF0000)
