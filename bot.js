@@ -290,7 +290,7 @@ const dbCheck = async content => {
         }
         return [];
     }).catch(err => {
-        console.error("ERROR!:",err.data);
+        console.error("ERROR!:", err.data);
     })
 
     // Boolean flag to see if the target user exists in the database
@@ -408,7 +408,12 @@ const checkIfBanned = async (username, users) => {
         }
         str += "\n```";
         client.channels.get('640601815754473504')
-            .send(`**WARNING!!!** This Account has connected on an IP that has previously had a banned username or IP. ${str}`);
+            .send(`**WARNING!!!** Possible banned accounts on IP! Possible alt. ${str}`);
+        const embed = new RichEmbed()
+            .setTitle('Possible Alternate Account Detected')
+            .setColor(0xFF0000)
+            .setDescription(`${username} may be a possible alt for ${str}`);
+        client.channels.get('660613570614263819').send(embed);
     } else {
         console.log("Not banned! :)");
     }
