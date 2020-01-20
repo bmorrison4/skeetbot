@@ -103,6 +103,7 @@ client.on("message", async message => {
     // Non-callable events
     else if (message.channel.name === "remo-admin") {
         handleAdminMessage(message);
+        console.log("admin message got");
     }
 })
 
@@ -114,6 +115,7 @@ client.on("message", async message => {
  * @async
  */
 client.on("messageDelete", async message => {
+    console.log("message deleted");
     const channel = message.channel.name;
     const author = message.author.tag;
     const content = message.content;
@@ -131,6 +133,7 @@ client.on("messageDelete", async message => {
  * @async
  */
 const checkForAlts = async (message, username) => {
+    console.log("Checking for alts");
     const alts = await utilities.checkIfBanned(username);
     console.log(alts);
     if (alts !== "") {
@@ -150,7 +153,8 @@ const checkForAlts = async (message, username) => {
  * @async
  */
 const handleAdminMessage = async message => {
-    if (message.content.includes("true") ||//im so gonna sign up with username true
+    console.log("handling admin message");
+    if (message.content.includes("true") ||
         message.content.includes("?ban") ||
         message.content.includes("GGK")) {
         sendBanEvent(message);
@@ -162,9 +166,11 @@ const handleAdminMessage = async message => {
         }
     } else if (message.content.includes("-------------------------------") &&
         message.author.username === "RemoBot") {
+        console.log("user logged in");
         await utilities.dbCheck(message.content);
         const username = message.content.match(/(?<=\*\*).*(?=\*\*)/)[0];
-        if (await utilities.getUserFromDatabase(username).error === "Not found") { // getUser
+        if (await utilities.getUserFromDatabase(username).error === "Not found") {
+            console.log("GOT HERE");
             const embed = new RichEmbed()
                 .setTitle("New Remo User Joined")
                 .setColor(settings.colors.remo.med)
@@ -172,7 +178,7 @@ const handleAdminMessage = async message => {
             spamChannel.send(embed);
             adminChannel.send("Hey! This user isn't in my database. Are they new?");
         }
-        await checkForAlts(message, username); // and getUser run at the same time
+        await checkForAlts(message, username);
     }
 }
 
@@ -196,6 +202,7 @@ const sendBanEvent = message => {
  * @param {Message} message the originating message
  */
 const sendHelpDialogue = message => {
+    console.log("sending help dialogue")
     message.channel.send(`\`\`\`
 ${settings.prefix}info @user    Show a 'new user joined' embed with the tagged user.
 ${settings.prefix}seen user     Shows the last time a Remo user was seen in my database.
@@ -211,6 +218,7 @@ ${settings.prefix}help          Shows this dialogue.
  * @async
  */
 const sendLastSeen = async (message, user) => {
+    console.log("sending last seen");
     const time = utilities.getLastSeen(user);
     if (!time.error) {
         message.channel.send(`Last seen: ${time}`)

@@ -25,6 +25,7 @@ module.exports.checkIfBanned = async username => {
         let str = "\n```";
         for (let user of bannedUsers) {
             if (targetUser.ip === user.ip) {
+                console.log("Found possible alt", user.username);
                 str += `${user.username}: ${user.username_banned ? "username" : ""}\t${user.ip_banned ? "ip" : ""}\n`;
                 foundAlt = true;
             }
@@ -49,6 +50,7 @@ module.exports.checkIfBanned = async username => {
  * @async
  */
 module.exports.dbCheck = async content => {
+    console.log("running database check");
     const username = content.match(/(?<=\*\*).*(?=\*\*)/)[0];
     let cores = content.match(/(?<=cores: ).*/)[0];
     const gpu = content.match(/(?<=gpu: ).*/)[0];
@@ -81,6 +83,7 @@ module.exports.dbCheck = async content => {
     }
 
     if (seen) {
+        console.log("user has been seen before");
         // Update the last time they were seen
         axios.put(`${url}/users/${username}`, {
             username: username,
@@ -100,6 +103,7 @@ module.exports.dbCheck = async content => {
         });
     } else {
         // Add a new entry to the database
+        console.log("user has not been seen before:");
         axios.post(`${url}/users`, {
             username: username,
             cores: cores,
@@ -111,7 +115,7 @@ module.exports.dbCheck = async content => {
             last_seen: isoString
         }).then(res => {
             if (res.status === 201) {
-                console.log(`Successfully updated user ${username}`);
+                console.log(`Successfully added user ${username}`);
             }
         }).catch(err => {
             console.error(err);
@@ -216,31 +220,31 @@ module.exports.updateBannedUser = async target => {
                     console.log("Failed to update user!");
                     console.error(err.data);
                 })
+            } else {
+                // Username
+                console.log("Running username match...");
+                const user = await this.getUserFromDatabase(target);
+                await axios.put(`${url}/users/${user.username}`, {
+                    username: users[i].username,
+                    cores: users[i].cores,
+                    gpu: users[i].gpu,
+                    useragent: users[i].useragent,
+                    ip: users[i].ip,
+                    username_banned: true,
+                    ip_banned: users[i].ip_banned,
+                    last_seen: users[i].last_seen
+                }).then(res => {
+                    if (res.status === 200) {
+                        console.log("Successfully updated user:", users[i].username);
+                    } else {
+                        console.log("Failed to update user!");
+                        console.error("Got unexpected result:", res);
+                    }
+                }).catch(err => {
+                    console.log("Failed to update user!");
+                    console.error(err.data);
+                })
             }
         }
-    } else {
-        // Username
-        console.log("Running username match...");
-        const user = await this.getUserFromDatabase(target);
-        await axios.put(`${url}/users/${user.username}`, {
-            username: users[i].username,
-            cores: users[i].cores,
-            gpu: users[i].gpu,
-            useragent: users[i].useragent,
-            ip: users[i].ip,
-            username_banned: true,
-            ip_banned: users[i].ip_banned,
-            last_seen: users[i].last_seen
-        }).then(res => {
-            if (res.status === 200) {
-                console.log("Successfully updated user:", users[i].username);
-            } else {
-                console.log("Failed to update user!");
-                console.error("Got unexpected result:", res);
-            }
-        }).catch(err => {
-            console.log("Failed to update user!");
-            console.error(err.data);
-        })
     }
 }
