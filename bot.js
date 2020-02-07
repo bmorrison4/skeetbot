@@ -15,7 +15,7 @@ let botChangedNickname = false;
  */
 client.once("ready", async () => {
     // skeet = client.users.get("284468812319817730");
-    axios.defaults.headers.common['Authorization'] = `Bearer settings.key`;
+    axios.defaults.headers.common['Authorization'] = `Bearer ${settings.key}`;
     client.user.setPresence({
         game: {
             name: "for bad guys",
@@ -206,7 +206,7 @@ const updateBannedUser = async target => {
     console.log("Target:", target)
 
     // Get the list of users from the database
-    const users = await axios.get(`http://${settings.db.server}:${settings.db.port}/api/users`).then(res => {
+    const users = await axios.get(`https://${settings.db.server}/api/users`).then(res => {
         if (res.status === 200) {
             return res.data;
         }
@@ -220,7 +220,7 @@ const updateBannedUser = async target => {
         for (let i = 0; i < users.length; i++) {
             if (users[i].ip === target) {
                 console.log("Found match", users[i].ip, target)
-                axios.put(`http://${settings.db.server}:${settings.db.port}/api/users/${users[i].username}`, {
+                axios.put(`https://${settings.db.server}/api/users/${users[i].username}`, {
                     username: users[i].username,
                     cores: users[i].cores,
                     gpu: users[i].gpu,
@@ -246,7 +246,7 @@ const updateBannedUser = async target => {
             console.log(users[i].ip, user.ip)
             if (users[i].ip === user.ip) {
                 console.log("Found match", users[i].username, user.username)
-                await axios.put(`http://${settings.db.server}:${settings.db.port}/api/users/${users[i].username}`, {
+                await axios.put(`https://${settings.db.server}/api/users/${users[i].username}`, {
                     username: users[i].username,
                     cores: users[i].cores,
                     gpu: users[i].gpu,
@@ -284,13 +284,14 @@ const dbCheck = async content => {
     ipBanned = (ipBanned === "true" ? true : false);
 
     // Get the list of users from the database
-    const users = await axios.get(`http://${settings.db.server}:${settings.db.port}/api/users`).then(res => {
+    const users = await axios.get(`https://${settings.db.server}/api/users`).then(res => {
         if (res.status === 200) {
             return res.data;
         }
         return [];
     }).catch(err => {
-        console.error("ERROR!:", err.data);
+        console.error("ERROR!:", err);
+        return [];
     })
 
     // Boolean flag to see if the target user exists in the database
@@ -305,7 +306,7 @@ const dbCheck = async content => {
 
     if (seen) {
         // update the last time they were seen
-        axios.put(`http://${settings.db.server}:${settings.db.port}/api/users/${username}`, {
+        axios.put(`https://${settings.db.server}/api/users/${username}`, {
             username: username,
             cores: cores,
             gpu: gpu,
@@ -324,7 +325,7 @@ const dbCheck = async content => {
         })
     } else {
         // Add a new entry to the database
-        axios.post(`http://${settings.db.server}:${settings.db.port}/api/users`, {
+        axios.post(`https://${settings.db.server}/api/users`, {
             username: username,
             cores: cores,
             gpu: gpu,
@@ -367,7 +368,7 @@ const dbCheck = async content => {
 const getUserFromDatabase = async user => {
     console.log(`Trying to get ${user} from the database...`)
     let result = "";
-    await axios.get(`http://${settings.db.server}:${settings.db.port}/api/users/${user}`)
+    await axios.get(`https://${settings.db.server}/api/users/${user}`)
         .then(res => {
             if (!res.data[0]) {
                 console.log("Found no users in database with matching username", user);
