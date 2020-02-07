@@ -15,7 +15,7 @@ let botChangedNickname = false;
  */
 client.once("ready", async () => {
     // skeet = client.users.get("284468812319817730");
-    axios.defaults.headers.common['key'] = settings.key;
+    axios.defaults.headers.common['Authorization'] = `Bearer settings.key`;
     client.user.setPresence({
         game: {
             name: "for bad guys",
