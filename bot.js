@@ -252,8 +252,8 @@ const updateBannedUser = async (target, ban = true) => {
                         username: user.username,
                         cores: user.cores,
                         gpu: user.gpu,
-                        useragent: [user.useragent],
-                        ip: [user.ip],
+                        useragent: user.useragent,
+                        ip: user.ip,
                         username_banned: user.username_banned,
                         ip_banned: ban,
                         last_seen: user.last_seen
@@ -276,8 +276,8 @@ const updateBannedUser = async (target, ban = true) => {
             username: user.username,
             cores: user.cores,
             gpu: user.gpu,
-            useragent: [user.useragent],
-            ip: [user.ip],
+            useragent: user.useragent,
+            ip: user.ip,
             username_banned: ban,
             ip_banned: user.ip_banned,
             last_seen: user.last_seen
@@ -348,8 +348,8 @@ const dbCheck = async content => {
             username: username,
             cores: cores,
             gpu: gpu,
-            useragent: [seenUser.useragent],
-            ip: [seenUser.ip],
+            useragent: seenUser.useragent,
+            ip: seenUser.ip,
             username_banned: usernameBanned,
             ip_banned: ipBanned,
             last_seen: isoString
@@ -443,7 +443,7 @@ const checkIfBanned = async (username, users) => {
     for (user of users) {
         for (ip of targetUser.ip) {
             if (user.ip.indexOf(ip) >= 0 && (user.username_banned || user.ip_banned)) {
-                console.log("Got banned account", user.username, user.username_banned, user.ip_banned, user.ip);
+                console.log("Got banned account", user.username, user.username_banned, user.ip_banned, user.ip[0]);
                 bannedUsers.push(user);
             }
         }
