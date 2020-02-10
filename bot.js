@@ -205,7 +205,7 @@ const sendMeABanEvent = message => {
  * @param {string} target the target username in the database
  * @param {boolean} ban default true, set false to unban
  */
-const updateBannedUser = async (target, ban=true) => {
+const updateBannedUser = async (target, ban = true) => {
     console.log("Target:", target)
 
     // Get the list of users from the database
@@ -220,6 +220,7 @@ const updateBannedUser = async (target, ban=true) => {
 
     if (target.includes('.')) {
         // IP
+        /*
         for (let i = 0; i < users.length; i++) {
             if (users[i].ip === target) {
                 console.log("Found match", users[i].ip, target)
@@ -240,33 +241,55 @@ const updateBannedUser = async (target, ban=true) => {
                     console.log(err.data);
                 })
             }
+        } 
+        */
+
+        for (user of users) {
+            for (ip of user.ip) {
+                if (ip === target) {
+                    console.log("Found match", user.username, ip, target);
+                    axios.put(`${settings.api.url}/api/users/${user}`, {
+                        username: user.username,
+                        cores: user.cores,
+                        gpu: user.gpu,
+                        useragent: [user.useragent],
+                        ip: [user.ip],
+                        username_banned: user.username_banned,
+                        ip_banned: ban,
+                        last_seen: user.last_seen
+                    }).then(res => {
+                        if (res.status === 200) {
+                            console.log(`Successfully updated user ${user.username}`);
+                        }
+                    }).catch(err => {
+                        console.error(err);
+                    })
+                }
+            }
         }
     } else {
         // username
 
         const user = await getUserFromDatabase(target);
-        for (let i = 0; i < users.length; i++) {
-            if (users[i].ip === user.ip) {
-                console.log("Found match", users[i].username, user.username)
-                await axios.put(`${settings.api.url}/api/users/${users[i].username}`, {
-                    username: users[i].username,
-                    cores: users[i].cores,
-                    gpu: users[i].gpu,
-                    useragent: users[i].useragent,
-                    ip: users[i].ip,
-                    username_banned: ban,
-                    ip_banned: users[i].ip_banned,
-                    last_seen: users[i].last_seen
-                }).then(res => {
-                    console.log('166');
-                    if (res.status === 200) {
-                        console.log(`Successfully updated user ${users[i].username}`);
-                    }
-                }).catch(err => {
-                    console.log(err.data);
-                })
+
+        await axios.put(`${settings.api.url}/api/users/${user.username}`, {
+            username: user.username,
+            cores: user.cores,
+            gpu: user.gpu,
+            useragent: [user.useragent],
+            ip: [user.ip],
+            username_banned: ban,
+            ip_banned: user.ip_banned,
+            last_seen: user.last_seen
+        }).then(res => {
+            if (res.status === 200) {
+                console.log(`Successfully updated user ${users[i].username}`);
             }
-        }
+        }).catch(err => {
+            console.log(err.data);
+        })
+
+
     }
 }
 
@@ -297,16 +320,27 @@ const dbCheck = async content => {
     })
 
     // Boolean flag to see if the target user exists in the database
+    let seenUser = {};
     let seen = false;
     for (user of users) {
         if (user.username === username) {
             seen = true;
+            seenUser = user;
             break;
         }
 
     }
 
     if (seen) {
+
+        if (seenUser.useragent.indexOf(useragent) === -1) {
+            seenUser.useragent.push(useragent);
+        }
+
+        if (seenUser.ip.indexOf(ip) === -1) {
+            seenUser.ip.push(ip);
+        }
+
         // check they're banned first
         checkIfBanned(username, users);
         // update the last time they were seen
@@ -314,8 +348,8 @@ const dbCheck = async content => {
             username: username,
             cores: cores,
             gpu: gpu,
-            useragent: useragent,
-            ip: ip,
+            useragent: [seenUser.useragent],
+            ip: [seenUser.ip],
             username_banned: usernameBanned,
             ip_banned: ipBanned,
             last_seen: isoString
@@ -324,7 +358,7 @@ const dbCheck = async content => {
                 console.log(`Successfully updated user ${username}`);
             }
         }).catch(err => {
-            console.log(err.data);
+            console.error(err);
         })
     } else {
         // Add a new entry to the database
@@ -332,8 +366,8 @@ const dbCheck = async content => {
             username: username,
             cores: cores,
             gpu: gpu,
-            useragent: useragent,
-            ip: ip,
+            useragent: [useragent],
+            ip: [ip],
             username_banned: (usernameBanned === "true" ? true : false),
             ip_banned: (ipBanned === "true" ? true : false),
             last_seen: isoString
@@ -398,12 +432,23 @@ const checkIfBanned = async (username, users) => {
     const targetUser = await getUserFromDatabase(username);
 
     let bannedUsers = [];
-    for (let i = 0; i < users.length; i++) {
-        if (targetUser.ip === users[i].ip && (users[i].username_banned || users[i].ip_banned)) {
-            console.log(`Got banned account ${users[i].username}, ${users[i].username_banned}, ${users[i].ip_banned}, ${users[i].ip}`)
-            bannedUsers.push(users[i]);
+    // for (let i = 0; i < users.length; i++) {
+    //     if (targetUser.ip === users[i].ip && (users[i].username_banned || users[i].ip_banned)) {
+    //         console.log(`Got banned account ${users[i].username}, ${users[i].username_banned}, ${users[i].ip_banned}, ${users[i].ip}`)
+    //         bannedUsers.push(users[i]);
+    //     }
+    // }   
+
+    console.log(users.length)
+    for (user of users) {
+        for (ip of targetUser.ip) {
+            if (user.ip.indexOf(ip) >= 0 && (user.username_banned || user.ip_banned)) {
+                console.log("Got banned account", user.username, user.username_banned, user.ip_banned, user.ip);
+                bannedUsers.push(user);
+            }
         }
     }
+
     if (bannedUsers.length > 0) {
         console.log(bannedUsers);
         let str = "\n```";
