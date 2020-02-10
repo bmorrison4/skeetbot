@@ -6,15 +6,13 @@ const settings = require('./settings.json');
 
 const client = new Client();
 let botChangedNickname = false;
-// let skeet = {};
 
 /**
- * Runs when the bot is ready. All discord reliant varialbes need to be 
+ * Runs when the bot is ready. All discord reliant variables need to be 
  * initialized here.
  * @async
  */
 client.once("ready", async () => {
-    // skeet = client.users.get("284468812319817730");
     axios.defaults.headers.common['Authorization'] = `Bearer ${settings.key}`;
     client.user.setPresence({
         game: {
@@ -88,7 +86,6 @@ client.on("message", async message => {
     else if (content.startsWith(`${settings.prefix}nick`)) {
         botChangedNickname = true;
         const user = client.users.get(message.mentions.users.first().id);
-        // console.log(user);
         if (message.author._roles.indexOf('607300573317824512') >= 0) {
             console.log("resetting nickname for", user.username);
             user.setNickname(user.username);
@@ -106,6 +103,11 @@ client.on("message", async message => {
                 const args = message.content.slice(settings.prefix.length).split(/ +/);
                 if (args[1]) {
                     updateBannedUser(args[1]);
+                }
+            } else if (content.startsWith("?unban")) {
+                const args = message.content.slice(settings.prefix.length).split(/ +/);
+                if (args[1]) {
+                    updateBannedUser(args[1], false);
                 }
             }
         }
@@ -201,8 +203,9 @@ const sendMeABanEvent = message => {
 /**
  * Update a user entry in the database to set their ban flags to true.
  * @param {string} target the target username in the database
+ * @param {boolean} ban default true, set false to unban
  */
-const updateBannedUser = async target => {
+const updateBannedUser = async (target, ban=true) => {
     console.log("Target:", target)
 
     // Get the list of users from the database
@@ -227,7 +230,7 @@ const updateBannedUser = async target => {
                     useragent: users[i].useragent,
                     ip: users[i].ip,
                     username_banned: users[i].username_banned,
-                    ip_banned: true,
+                    ip_banned: ban,
                     last_seen: users[i].last_seen
                 }).then(res => {
                     if (res.status === 200) {
@@ -252,7 +255,7 @@ const updateBannedUser = async target => {
                     gpu: users[i].gpu,
                     useragent: users[i].useragent,
                     ip: users[i].ip,
-                    username_banned: true,
+                    username_banned: ban,
                     ip_banned: users[i].ip_banned,
                     last_seen: users[i].last_seen
                 }).then(res => {
