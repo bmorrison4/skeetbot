@@ -246,7 +246,6 @@ const updateBannedUser = async (target, ban=true) => {
 
         const user = await getUserFromDatabase(target);
         for (let i = 0; i < users.length; i++) {
-            console.log(users[i].ip, user.ip)
             if (users[i].ip === user.ip) {
                 console.log("Found match", users[i].username, user.username)
                 await axios.put(`${settings.api.url}/api/users/${users[i].username}`, {
