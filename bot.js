@@ -305,6 +305,8 @@ const dbCheck = async content => {
     }
 
     if (seen) {
+        // check they're banned first
+        checkIfBanned(username, users);
         // update the last time they were seen
         axios.put(`${settings.api.url}/api/users/${username}`, {
             username: username,
@@ -318,7 +320,6 @@ const dbCheck = async content => {
         }).then(res => {
             if (res.status === 200) {
                 console.log(`Successfully updated user ${username}`);
-                checkIfBanned(username, users);
             }
         }).catch(err => {
             console.log(err.data);
