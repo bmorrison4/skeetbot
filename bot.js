@@ -395,7 +395,7 @@ async function checkIfBanned(user, users) {
         const embed = new RichEmbed()
             .setTitle('Possible Alternate Account Detected')
             .setColor(0xFF0000)
-            .setDescription(`${user} may be a possible alt for ${str}`);
+            .setDescription(`${user.username} may be a possible alt for ${str}`);
         client.channels.get('660613570614263819').send(embed);
     } else {
         console.log("Not banned! :)");
