@@ -102,7 +102,7 @@ ws.onmessage = async event => {
                 cores: alt.hardwareConcurrency,
                 useragent: alt.userAgent,
                 ip: data.d.ip,
-                username_banned: data.d.internalUsernameBanned,//what? but "true" === true is false, the server returns a boolean //well then it is wrong and will not function as expected literally will always be false
+                username_banned: data.d.internalUsernameBanned,
                 ip_banned: data.d.internalIpBanned
             })
         }
@@ -342,6 +342,23 @@ async function updateDatabase(user) {
                 console.error("Error updating seen user", err);
             });
 
+    } else {
+        await axios.post(`${settings.api.url}/api/users/`, {
+            username: user.username,
+            cores: user.cores,
+            gpu: user.gpu,
+            useragent: user.useragent,
+            ip: user.ip,
+            username_banned: user.username_banned,
+            ip_banned: user.ip_banned,
+            last_seen: isoString
+        }).then(res => {
+            if (res.status === 200) {
+                console.log("Successfully added new user", user.username);
+                client.channels.get('640601815754473504').send(`Hey! ${user.username} isn't in my database!`)
+                client.channels.get('660613570614263819').send(`New user\n\n${user}`)
+            }
+        })
     }
 }
 
