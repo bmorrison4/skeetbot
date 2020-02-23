@@ -73,6 +73,9 @@ ws.onmessage = async event => {
     if (data.e === "userAuthenticated") {
         const alt = JSON.parse(Buffer.from(data.d.alt, 'base64').toString());
         const dbUser = await getUserFromDatabase(data.d.username);
+
+        // If user/ip is not banned on site, but banned in database; assume
+        // site is out of sync and ban the user/ip
         if (!data.d.internalUsernameBanned && dbUser.username_banned) {
             console.log(`${data.d.username} is supposed to be username banned!`)
             ws.send(JSON.stringify({
@@ -81,31 +84,36 @@ ws.onmessage = async event => {
                     username: data.d.username
                 }
             }))
-            if (!data.d.internalIpBanned && dbUser.ip_banned) {
-                console.log(`${data.d.ip} is supposed to be IP banned!`);
-                ws.send(JSON.stringify({
-                    e: "INTERNAL_LISTNER_BAN",
-                    d: {
-                        ip: data.d.ip
-                    }
-                }))
-            }
-            if (data.d.internalUsernameBanned && !dbUser.username_banned) {
-                updateBannedUser(data.d.username);
-            }
-            if (data.d.internalIpBanned && !dbUser.ip_banned) {
-                updateBannedUser(data.d.ip);
-            }
-            updateDatabase({
-                username: data.d.username,
-                gpu: alt.renderer,
-                cores: alt.hardwareConcurrency,
-                useragent: alt.userAgent,
-                ip: data.d.ip,
-                username_banned: data.d.internalUsernameBanned,
-                ip_banned: data.d.internalIpBanned
-            })
         }
+        if (!data.d.internalIpBanned && dbUser.ip_banned) {
+            console.log(`${data.d.ip} is supposed to be IP banned!`);
+            ws.send(JSON.stringify({
+                e: "INTERNAL_LISTNER_BAN",
+                d: {
+                    ip: data.d.ip
+                }
+            }))
+        }
+
+        // If user/ip is banned on site, but not in database; assume database
+        // is out of sync and update it.
+        if (data.d.internalUsernameBanned && !dbUser.username_banned) {
+            updateBannedUser(data.d.username);
+        }
+        if (data.d.internalIpBanned && !dbUser.ip_banned) {
+            updateBannedUser(data.d.ip);
+        }
+
+        
+        updateDatabase({
+            username: data.d.username,
+            gpu: alt.renderer,
+            cores: alt.hardwareConcurrency,
+            useragent: alt.userAgent,
+            current_ip: data.d.ip,
+            username_banned: data.d.internalUsernameBanned,
+            ip_banned: data.d.internalIpBanned
+        })
     }
 }
 /**
@@ -210,40 +218,14 @@ async function updateBannedUser(target, ban = true) {
 
     if (target.includes('.')) {
         // IP
-        const users = await axios.get(`${settings.api.url}/api/users`).then(res => { // i hate this
+        await axios.put(`${settings.api.url}/api/ips`, {
+            ip: target,
+            banned: ban
+        }).then(res => {
             if (res.status === 200) {
-                return res.data;
+                console.log("IP successfully un/banned:", target, ban);
             }
-            return [];
-        }).catch(err => {
-            console.error("ERROR!", err);
-            return [];
         })
-        for (user of users) { //should really have const or let whicher is appropriate infront to avoid possible issues (for all for of)
-            for (ip of user.ip) {
-                if (ip === target) {
-                    console.log("Found match", target, ip);
-                    await axios.put(`${settings.api.url}/api/users/${user}`, { //and this
-                        username: user.username,
-                        cores: user.cores,
-                        gpu: user.gpu,
-                        useragent: user.useragent,
-                        ip: user.ip,
-                        username_banned: user.username_banned,
-                        ip_banned: ban,
-                        last_seen: user.last_seen
-                    }).then(res => {
-                        if (res.status === 200) {
-                            console.log("Successfully updated user", user.username);
-                        } else {
-                            console.log("Something went wrong, got response", res.status);
-                        }
-                    }).catch(err => {
-                        console.error("ERROR!", err);
-                    })
-                }
-            }
-        }
     } else {
         // Username
         let userFound = false;
@@ -318,22 +300,24 @@ async function updateDatabase(user) {
             seenUser.useragent.push(user.useragent);
         }
 
-        if (seenUser.ip.indexOf(user.ip) === -1) {//uggo
-            seenUser.ip.push(ip);
-        }
+        // if (seenUser.ip.indexOf(user.ips) === -1) {//uggo
+        //     seenUser.ip.push(ip);
+        // }
 
 
-        checkIfBanned(user, users);
+        // checkIfBanned(user, users);
+        console.log(`SEEN USER\n\n\n${seenUser.ip_banned}\n\n\n`)
         await axios.put(`${settings.api.url}/api/users/${user.username}`,
             {
                 username: seenUser.username,
                 cores: seenUser.cores,
                 gpu: seenUser.gpu,
-                ip: seenUser.ip,
+                ips: seenUser.ips,
                 ip_banned: seenUser.ip_banned,
                 last_seen: seenUser.last_seen,
                 username_banned: seenUser.username_banned,
-                useragent: seenUser.useragent
+                useragent: seenUser.useragent,
+                current_ip: user.current_ip
             }).then(res => {
                 if (res.status === 200) {
                     console.log("Successfully updated user", user.username);
@@ -374,9 +358,11 @@ async function checkIfBanned(user, users) {
 
     }
 
+    console.log(`USER\n\n\n${targetUser}\n\n\n`);
+
     let bannedUsers = [];
     for (tmpUser of users) {
-        for (ip of targetUser.ip) {
+        for (ip of targetUser.ips) {
             if (tmpUser.ip.indexOf(ip) >= 0 && (tmpUser.username_banned || tmpUser.ip_banned)) {
                 console.log("Got banned account", tmpUser.username, tmpUser.username_banned, tmpUser.ip_banned, tmpUser.ip[0]);
                 bannedUsers.push(tmpUser);
