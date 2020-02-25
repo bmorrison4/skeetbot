@@ -1,23 +1,53 @@
-const axios = require('axios');
-const { Client, RichEmbed } = require('discord.js');
+const axios = require('axios')
+const { Client, RichEmbed } = require('discord.js')
 const os = require('os');
+const WebSocket = require('ws');
 
 const settings = require('./settings.json');
 
 const client = new Client();
+const ws = new WebSocket(settings.websocket.url);
 let botChangedNickname = false;
+axios.defaults.headers.common['Authorization'] = `Bearer ${settings.api.key}`;
+
 
 /**
- * Runs when the bot is ready. All discord reliant variables need to be 
- * initialized here.
- * @async
+ * @typedef {Object} WSUser
+ * @property {string} username their remo username
+ * @property {string} renderer their GPU string
+ * @property {number} cores number of cpu cores
+ * @property {string} userAgent their user agent string
+ * @property {string} ip their connecting IP
+ * @property {boolean} internalUsernameBanned if they are banned via username
+ * @property {boolean} internalIpBanned if they are banned via IP
  */
-client.once("ready", async () => {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${settings.key}`;
+/**
+ * @typedef {Object} DBUser
+ * @property {string} username their stored username
+ * @property {string[]} useragent their tracked useragents
+ * @property {number} cores their cpu cores
+ * @property {string} gpu their GPU string
+ * @property {Date.isoString} last_seen the time they last logged in
+ * @property {string[]} ips their tracked ips
+ * @property {boolean} username_banned if they've been banned via username
+ */
+/**
+ * @typedef {Object} DBIP 
+ * @property {string} ip the stored IP
+ * @property {boolean} banned if the IP has been banned
+ */
+
+
+
+client.on("ready", () => {
+    // All Discord reliant variables need to be initialized here.
+
+    console.log("Attemping Discord Login...");
+
     client.user.setPresence({
         game: {
-            name: "for bad guys",
-            type: "WATCHING"
+            name: "Whack-A-Troll",
+            type: "PLAYING"
         },
         status: "online"
     });
@@ -26,6 +56,70 @@ client.once("ready", async () => {
 });
 
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
+    await doGuildMemberUpdate(oldMember, newMember);
+})
+
+client.on("guildMemberAdd", member => {
+    doGuildMemberAdd(member.user);
+})
+
+client.on("message", async message => {
+    if (message.channel.name === "remo-admin") {
+        await handleAdminMessage(message);
+    }
+})
+
+client.on("messageDelete", message => {
+    doMessageDelete(message);
+})
+
+ws.onopen = () => {
+    ws.send(JSON.stringify({
+        e: 'INTERNAL_LISTENER_AUTHENTICATE',
+        d: {
+            key: settings.websocket.internal_key
+        }
+    }));
+
+    // ws.send(JSON.stringify({
+    //     e: 'AUTHENTICATE',
+    //     d: {
+    //         token: settings.websocket.token,
+    //         alt: Buffer.from(JSON.stringify({
+    //             userAgent: 'LED Bot RULZ',
+    //             hardwareConcurrency: '42069',
+    //             renderer: 'your mother'
+    //         })).toString('base64')
+    //     }
+    // }));
+    console.log("Logged into Remo");
+}
+
+ws.onmessage = async event => {
+    const data = JSON.parse(event.data);
+
+    if (data.e === "userAuthenticated") {
+        const alt = JSON.parse(Buffer.from(data.d.alt, 'base64').toString());
+
+        updateDatabase({
+            username: data.d.username,
+            renderer: alt.renderer,
+            hardwareConcurrency: alt.hardwareConcurrency,
+            userAgent: alt.userAgent,
+            ip: data.d.ip,
+            internalUsernameBanned: data.d.internalUsernameBanned,
+            internalIpBanned: data.d.internalIpBanned
+        })
+    }
+}
+/**
+ * Checks if the member updating has the "DontBeADooDooHead" role, and reverts
+ * their nickname if they changed it.
+ * @param {GuildMember} oldMember member before update
+ * @param {GuildMember} newMember member after update
+ * @async
+ */
+async function doGuildMemberUpdate(oldMember, newMember) {
     if (!botChangedNickname &&
         newMember._roles.indexOf('662719620603576322') >= 0 &&
         oldMember.nickname !== newMember.nickname) {
@@ -33,165 +127,73 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
         botChangedNickname = true;
         await newMember.setNickname(oldMember.nickname);
         botChangedNickname = false;
-    } else if (botChangedNickname) {
-        botChangedNickname = false;
     }
-})
+}
 
 /**
- * Runs when somebody joins the server.
- * @param {GuildMember} member the member who joined the server
- * @async
+ * Send an alert when somebody joins the Discord server.
+ * @param {User} user the joining user
  */
-client.on("guildMemberAdd", async member => {
-    sendJoinMessage(member.user);
-});
+function doGuildMemberAdd(user) {
+    const embed = new RichEmbed()
+        .setTitle("New Discord user Joined")
+        .setColor(0x00FFFF)
+        .setDescription(
+            `${user.username} joined the server.
+\`\`\`
+tag:        ${user.tag}
+ID:         ${user.id}
+bot:        ${user.bot}
+created:    ${user.createdAt}
+\`\`\``);
+    client.channels.get('660613570614263819').send(embed);
+}
 
 /**
- * Message event. All chat reliant commands need to be here.
- * @param {Message} message the message that was sent
- * @async
+ * Handles bans in the admin channel.
+ * @param {Message} message the message
  */
-client.on("message", async message => {
+async function handleAdminMessage(message) {
     const content = message.content;
 
-    // %info user - where user is a Discord memeber.
-    if (content.startsWith(`${settings.prefix}info`)) {
-        const target = message.mentions.users.first();
-        sendJoinMessage(target);
-    }
-
-    // %add user usernameBanned ipBanned - where user is a Remo user,
-    // bans are boolean.
-    else if (content.startsWith(`${settings.prefix}add`)) {
-        // Not yet implemented.
-        return;
-    }
-
-    // %seen user - where user is a Remo user.
-    else if (content.startsWith(`${settings.prefix}seen`)) {
-        const args = message.content.slice(settings.prefix.length).split(/ +/);
-        if (args[1]) {
-            sendLastSeen(message, args[1]);
-        } else {
-            message.channel.send("You need to specify a Remo user!");
-        }
-    }
-
-    // %help - send the help dialogue
-    else if (content.startsWith(`${settings.prefix}help`)) {
-        sendHelpDialogue(message);
-    }
-
-    else if (content.startsWith(`${settings.prefix}nick`)) {
-        botChangedNickname = true;
-        const user = client.users.get(message.mentions.users.first().id);
-        if (message.author._roles.indexOf('607300573317824512') >= 0) {
-            console.log("resetting nickname for", user.username);
-            user.setNickname(user.username);
-        } else {
-            console.log("insufficent perms to change nick");
-        }
-    }
-
-    // Non-callable events
-    else if (message.channel.name === "remo-admin") {
-        // Ban events
-        if (content.includes("true") || content.includes("?ban") || content.includes("GGK")) {
-            sendMeABanEvent(message);
-            if (content.startsWith("?ban")) {
-                const args = message.content.slice(settings.prefix.length).split(/ +/);
-                if (args[1]) {
-                    updateBannedUser(args[1]);
-                }
-            } else if (content.startsWith("?unban")) {
-                const args = message.content.slice(settings.prefix.length).split(/ +/);
-                if (args[1]) {
-                    updateBannedUser(args[1], false);
-                }
+    // Ban events
+    if (content.includes("?ban" || content.includes("GGK"))) {
+        handleBanEvent(message);
+        if (content.startsWith("?ban")) {
+            const args = content.slice(settings.prefix.length).split(/ +/);
+            if (args[1]) {
+                updateBannedUser(args[1]);
+            }
+        } else if (content.startsWith("?unban")) {
+            const args = content.slice(settings.prefix.length).split(/ +/);
+            if (args[1]) {
+                updateBannedUser(args[1], false);
             }
         }
-        else if (content.includes("-------------------------------") && message.author.username === "RemoBot") {
-            dbCheck(content);
-        }
     }
-});
+}
 
-client.on("messageDelete", async message => {
+/**
+ * Pastes  a deleted message into the skeetbot spam channel
+ * @param {Message} message the deleted message
+ */
+function doMessageDelete(message) {
     const channel = message.channel.name;
     const author = `${message.author.username}#${message.author.discriminator}`;
     const content = message.content;
     const embed = new RichEmbed()
         .setTitle(`Message deleted in #${channel}`)
         .setColor(0x009999)
-        .setDescription(
-            `${author}: ${content}`
-        );
-    client.channels.get('660613570614263819').send(embed);
-})
-
-/**
- * Send a RichEmbed to #remo-internal when somebody joins the server.
- * 
- * @param {GuildMember} user The joined user
- * @async
- */
-const sendJoinMessage = async user => {
-    const embed = new RichEmbed()
-        .setTitle("New user joined")
-        .setColor(0x00FFFF)
-        .setDescription(
-            `${user.username} joined the server.
-\`\`\`
-tag:     ${user.tag}
-ID:      ${user.id}
-bot:     ${user.bot}
-created: ${user.createdAt}
-\`\`\``);
+        .setDescription(`${author}\t${content}`);
 
     client.channels.get('660613570614263819').send(embed);
 }
 
 /**
- * Sends the last seen time from the database for a specified user.
- * 
- * @param {Message} message the message that triggered the event
- * @param {string} user the Remo username to get
- * @async
+ * Alerts of a possible banned user or when a ban happens via Discord.
+ * @param {Message} message 
  */
-const sendLastSeen = async (message, user) => {
-    console.log(`Trying to get ${user}`)
-    const userObj = await getUserFromDatabase(user);
-    if (!userObj.error) {
-        const lastSeen = new Date(userObj.last_seen);
-
-        const lastSeenDate = `${lastSeen.getUTCMonth() + 1}/${lastSeen.getUTCDate()}/${lastSeen.getUTCFullYear()} ${lastSeen.getUTCHours()}:`;
-        const lastSeenMinutes = (lastSeen.getMinutes() < 10 ? `0${lastSeen.getMinutes()}` : `${lastSeen.getUTCMinutes()}`);
-
-        message.channel.send(`Last seen: ${lastSeenDate}${lastSeenMinutes} UTC`);
-    } else {
-        message.channel.send(userObj.error);
-    }
-}
-
-/**
- * Sends a help dialogue to the channel where the message was called.
- * 
- * @param {Message} message the originating message
- */
-const sendHelpDialogue = message => {
-    message.channel.send(`\`\`\`
-${settings.prefix}info @user    Show a 'new user joined' embed with the tagged user
-${settings.prefix}seen user     Shows the last time a Remo user was seen in my database.
-${settings.prefix}help          Shows this dialogue.
-\`\`\``)
-}
-
-/**
- * Sends Me a ban alert any time this is triggered
- * @param {Message} message the originating message
- */
-const sendMeABanEvent = message => {
+function handleBanEvent(message) {
     console.log("got ban message or login, sending to skeetbot channel");
     const embed = new RichEmbed()
         .setTitle("Got Ban Info")
@@ -201,221 +203,237 @@ const sendMeABanEvent = message => {
 }
 
 /**
- * Update a user entry in the database to set their ban flags to true.
- * @param {string} target the target username in the database
- * @param {boolean} ban default true, set false to unban
+ * Updates a ban on a username or IP
+ * @param {String} target username or IP to ban
+ * @param {boolean} [ban=true] whether to ban or unban. Default = true. true = ban.
  */
-const updateBannedUser = async (target, ban = true) => {
-    console.log("Target:", target)
+async function updateBannedUser(target, ban = true) {
+    console.log("un/banning", target, ban);
 
-    // Get the list of users from the database
-    const users = await axios.get(`${settings.api.url}/api/users`).then(res => {
-        if (res.status === 200) {
-            return res.data;
-        }
-        return [];
-    }).catch(err => {
-        console.error(err.data);
-    })
 
     if (target.includes('.')) {
         // IP
-        /*
-        for (let i = 0; i < users.length; i++) {
-            if (users[i].ip === target) {
-                console.log("Found match", users[i].ip, target)
-                axios.put(`${settings.api.url}/api/users/${users[i].username}`, {
-                    username: users[i].username,
-                    cores: users[i].cores,
-                    gpu: users[i].gpu,
-                    useragent: users[i].useragent,
-                    ip: users[i].ip,
-                    username_banned: users[i].username_banned,
-                    ip_banned: ban,
-                    last_seen: users[i].last_seen
-                }).then(res => {
-                    if (res.status === 200) {
-                        console.log(`Successfully updated user ${users[i].username}`);
-                    }
-                }).catch(err => {
-                    console.log(err.data);
-                })
+        await axios.put(`${settings.api.url}/api/ips`, {
+            ip: target,
+            banned: ban
+        }).then(res => {
+            if (res.status === 200) {
+                console.log("IP successfully un/banned:", target, ban);
             }
-        } 
-        */
-
-        for (user of users) {
-            for (ip of user.ip) {
-                if (ip === target) {
-                    console.log("Found match", user.username, ip, target);
-                    axios.put(`${settings.api.url}/api/users/${user}`, {
-                        username: user.username,
-                        cores: user.cores,
-                        gpu: user.gpu,
-                        useragent: user.useragent,
-                        ip: user.ip,
-                        username_banned: user.username_banned,
-                        ip_banned: ban,
-                        last_seen: user.last_seen
-                    }).then(res => {
-                        if (res.status === 200) {
-                            console.log(`Successfully updated user ${user.username}`);
-                        }
-                    }).catch(err => {
-                        console.error(err);
-                    })
+        })
+    } else {
+        // Username
+        let userFound = false;
+        let user = {};
+        await axios.get(`${settings.api.url}/api/users/${target}`).then(res => { // and this
+            if (res.status === 200) {
+                console.log("Got user", target);
+                userFound = true;
+                user = res.data[0];
+            } else {
+                console.error("Could not get user", target, res.status);
+            }
+        })
+        if (userFound) {
+            await axios.put(`${settings.api.url}/api/users/${target}`, {
+                username: user.username,
+                cores: (isNaN(user.cores) ? 0 : user.cores),
+                gpu: user.gpu,
+                useragent: user.useragent,
+                ips: user.ips,
+                username_banned: ban,
+                last_seen: user.last_seen
+            }).then(res => {
+                if (res.status === 200) {
+                    console.log("Successfully updated user", user.username);
+                } else {
+                    console.log("Something went wrong, got response", res.status);
                 }
-            }
+            }).catch(err => {
+                console.error("Error updating banned user", err);
+            })
         }
-    } else {
-        // username
-
-        const user = await getUserFromDatabase(target);
-
-        await axios.put(`${settings.api.url}/api/users/${user.username}`, {
-            username: user.username,
-            cores: user.cores,
-            gpu: user.gpu,
-            useragent: user.useragent,
-            ip: user.ip,
-            username_banned: ban,
-            ip_banned: user.ip_banned,
-            last_seen: user.last_seen
-        }).then(res => {
-            if (res.status === 200) {
-                console.log(`Successfully updated user ${users[i].username}`);
-            }
-        }).catch(err => {
-            console.log(err.data);
-        })
-
-
-    }
-}
-
-const dbCheck = async content => {
-    const username = content.match(/(?<=\*\*).*(?=\*\*)/)[0];
-    let cores = content.match(/(?<=cores: ).*/)[0];
-    const gpu = content.match(/(?<=gpu: ).*/)[0];
-    const useragent = content.match(/(?<=user-agent: ).*/)[0];
-    const ip = content.match(/(?<=ip: ).*/)[0];
-    let usernameBanned = content.match(/(?<=usernameBanned: ).*/)[0];
-    let ipBanned = content.match(/(?<=ipBanned: ).*/)[0];
-    const lastSeen = new Date();
-    const isoString = lastSeen.toISOString();
-
-    cores = (isNaN(cores) ? 0 : cores);
-    usernameBanned = (usernameBanned === "true" ? true : false);
-    ipBanned = (ipBanned === "true" ? true : false);
-
-    // Get the list of users from the database
-    const users = await axios.get(`${settings.api.url}/api/users`).then(res => {
-        if (res.status === 200) {
-            return res.data;
-        }
-        return [];
-    }).catch(err => {
-        console.error("ERROR!:", err);
-        return [];
-    })
-
-    // Boolean flag to see if the target user exists in the database
-    let seenUser = {};
-    let seen = false;
-    for (user of users) {
-        if (user.username === username) {
-            seen = true;
-            seenUser = user;
-            break;
-        }
-
-    }
-
-    if (seen) {
-
-        if (seenUser.useragent.indexOf(useragent) === -1) {
-            seenUser.useragent.push(useragent);
-        }
-
-        if (seenUser.ip.indexOf(ip) === -1) {
-            seenUser.ip.push(ip);
-        }
-
-        // check they're banned first
-        checkIfBanned(username, users);
-        // update the last time they were seen
-        axios.put(`${settings.api.url}/api/users/${username}`, {
-            username: username,
-            cores: cores,
-            gpu: gpu,
-            useragent: seenUser.useragent,
-            ip: seenUser.ip,
-            username_banned: usernameBanned,
-            ip_banned: ipBanned,
-            last_seen: isoString
-        }).then(res => {
-            if (res.status === 200) {
-                console.log(`Successfully updated user ${username}`);
-            }
-        }).catch(err => {
-            console.error(err);
-        })
-    } else {
-        // Add a new entry to the database
-        axios.post(`${settings.api.url}/api/users`, {
-            username: username,
-            cores: cores,
-            gpu: gpu,
-            useragent: [useragent],
-            ip: [ip],
-            username_banned: (usernameBanned === "true" ? true : false),
-            ip_banned: (ipBanned === "true" ? true : false),
-            last_seen: isoString
-        }).then(res => {
-            if (res.status === 201) {
-                console.log(`Successfully added user ${username}`);
-                const embed = new RichEmbed()
-                    .setTitle("New Remo user joined")
-                    .setColor(0xFFFF00)
-                    //                    .setDescription(
-                    //                        `Username: ${username}
-                    //Cores: ${cores}
-                    //GPU: ${gpu}
-                    //UA: \`${useragent}\`
-                    //IP: ${ip}
-                    //Username Banned?: ${usernameBanned}
-                    //IP Banned?: ${ipBanned}`);
-                    .setDescription(content);
-                client.channels.get('660613570614263819').send(embed);
-                client.channels.get('640601815754473504').send("Hey! This user isn't in my database. Are they new?");
-            }
-
-        }).catch(err => {
-            console.error(err);
-        })
     }
 }
 
 /**
- * Gets a user entry from the database if it exists.
- * @param {String} user the name of the user to check
- * 
- * @returns {Object} a user object with information gotten from the database
+ * Updates the last time a user was seen if they exist, otherwise add them to
+ * the database.
+ * @param {WSUser} user the user to update
  */
-const getUserFromDatabase = async user => {
+async function updateDatabase(user) {
+    const lastSeen = new Date();
+    const isoString = lastSeen.toISOString();
+
+    const dbUser = await getUserFromDatabase(user.username);
+    if (dbUser.username) {
+        await checkIfBanned(dbUser);
+        await banSync(user);
+        if (dbUser.useragent.indexOf(user.userAgent) < 0) {
+            dbUser.useragent.push(user.userAgent);
+        }
+        if (dbUser.ips.indexOf(user.ip) < 0) {
+            let ipExists = true;
+            await axios.get(`${settings.api.url}/api/ip`, { ip: user.ip })
+                .then(res => {
+                    console.log(res.data);
+                    if (res.data.length === 0 && res.status === 200) {
+                        ipExists = false;
+                    }
+                }).catch(err => {
+                    console.error(err);
+                })
+            if (!ipExists) {
+                await axios.put(`${settings.api.url}/api/ips`, {
+                    ip: user.ip,
+                    banned: user.internalIpBanned
+                }).then(res => {
+                    if (res.status === 200) {
+                        console.log("Successfully added ip", user.ip)
+                    }
+                }).catch(err => {
+                    console.error(err);
+                })
+            }
+            dbUser.ips.push(user.ip)
+        }
+        dbUser.last_seen = isoString;
+        await axios.put(`${settings.api.url}/api/users/${dbUser.username}`,
+            {
+                username: dbUser.username,
+                useragent: dbUser.useragent,
+                cores: dbUser.cores,
+                gpu: dbUser.gpu,
+                last_seen: dbUser.last_seen,
+                ips: dbUser.ips,
+                username_banned: dbUser.username_banned
+            }).then(res => {
+                if (res.status === 200) {
+                    console.log("Successfully updated user", dbUser.username);
+                } else {
+                    console.error("Something went wrong...", res)
+                }
+            }).catch(err => {
+                console.error(err);
+            });
+    } else {
+        //if not exists:
+        //  add new user to the database
+        await axios.post(`${settings.api.url}/api/users/`, {
+            username: user.username,
+            cores: (isNaN(user.hardwareConcurrency) ? 0 : user.hardwareConcurrency),
+            gpu: user.renderer,
+            useragent: [user.userAgent],
+            username_banned: user.internalUsernameBanned,
+            ips: [user.ip],
+            last_seen: isoString
+        }).then(res => {
+            if (res.status === 201) {
+                console.log("Successfully added user", user.username)
+            }
+        }).catch(err => {
+            console.error(err);
+        });
+        //  add new IP to the database
+        await axios.post(`${settings.api.url}/api/ips`, {
+            ip: user.ip,
+            banned: user.internalIpBanned
+        }).then(res => {
+            if (res.status === 201) {
+                console.log("Successfully added IP", user.ip);
+            }
+        }).catch(err => {
+            console.error(err);
+        });
+        client.channels.get('640601815754473504').send(`${user.username} doesn't exist in my database!`);
+        const embed = new RichEmbed()
+            .setTitle("New Remo User")
+            .setColor(0xFFFF00)
+            .setDescription(`${user.username}`);
+        client.channels.get('660613570614263819').send(embed);
+    }
+
+    console.log("\n\n");
+}
+
+/**
+ * Tests if a user is a possible alt for other banned accounts.
+ * @param {DBUser} user The user to test for
+ */
+async function checkIfBanned(user) {
+    console.log(`Checking if ${user.username} is banned...`);
+    let bannedUsernames = [];
+    await axios.get(`${settings.api.url}/api/bannedusers`)
+        .then(res => {
+            for (const ip of user.ips) {
+                for (const bannedUser of res.data) {
+                    for (const ip2 of bannedUser.ips) {
+                        if (ip === ip2 &&
+                            bannedUsernames.indexOf(bannedUser.username) < 0) {
+                            bannedUsernames.push(bannedUser.username);
+                        }
+                    }
+                }
+            }
+        })
+
+    let bannedIps = [];
+    await axios.get(`${settings.api.url}/api/bannedips`)
+        .then(res => {
+            for (const ip of user.ips) {
+                for (const bannedIp of res.data) {
+                    if (ip === bannedIp.ip) {
+                        bannedIps.push(ip);
+                    }
+                }
+            }
+        }).catch(err => {
+            console.error(err);
+        })
+    if (bannedUsernames.length > 0 || bannedIps.length > 0) {
+        console.log("Found banned usernames or IPs", bannedUsernames, bannedIps);
+        const embed = new RichEmbed()
+            .setTitle("Possible alternate account(s)")
+            .setColor(0xFF0000)
+            .setDescription(
+                `**WARNING** ${user.username} is a possible alt!
+\`\`\`
+${(bannedUsernames.length > 0 ? bannedUsernames : "")}
+${(bannedIps.length > 0 ? bannedIps : "")}
+\`\`\``
+            )
+        client.channels.get('660613570614263819').send(embed);
+        client.channels.get('640601815754473504').send(embed);
+    } else {
+        if (user.username === "jill") {
+            console.log("Not banned! :]");
+        } else {
+            console.log("Not banned! :)");
+        }
+    }
+}
+
+
+
+/**
+ * gets a specific user from the database
+ * @param {string} user the username to get
+ */
+async function getUserFromDatabase(user) {
+
     console.log(`Trying to get ${user} from the database...`)
     let result = "";
     await axios.get(`${settings.api.url}/api/users/${user}`)
         .then(res => {
             if (!res.data[0]) {
                 console.log("Found no users in database with matching username", user);
-                result = { error: "Not Found" };
+                result = [];
             } else {
                 console.log("Found username", user);
                 result = res.data[0];
             }
         }).catch(err => {
-            console.error(err);
+            console.error("Error getting user from database", err);
             result = { error: err };
         })
     return result;
@@ -423,50 +441,59 @@ const getUserFromDatabase = async user => {
 
 /**
  * 
- * @param {string} username the username to test if logging in from an IP where 
- * somebody else may have been banned
- * @param {Array[User]} users array of users in database
+ * @param {WSUser} user connecting user
  */
-const checkIfBanned = async (username, users) => {
-    console.log(`Checking if ${username} is banned...`)
-    const targetUser = await getUserFromDatabase(username);
+async function banSync(user) {
+    console.log("Synchronizing database and website bans...");
 
-    let bannedUsers = [];
-    // for (let i = 0; i < users.length; i++) {
-    //     if (targetUser.ip === users[i].ip && (users[i].username_banned || users[i].ip_banned)) {
-    //         console.log(`Got banned account ${users[i].username}, ${users[i].username_banned}, ${users[i].ip_banned}, ${users[i].ip}`)
-    //         bannedUsers.push(users[i]);
-    //     }
-    // }   
+    let usernameBanned = false;
+    let ipBanned = false;
+    await axios.get(`${settings.api.url}/api/users/${user.username}`)
+        .then(res => {
+            usernameBanned = res.data.username_banned;
+        }).catch(err => {
+            console.error(err);
+            return;
+        })
+    await axios.get(`${settings.api.url}/api/ip`, { "ip": user.ip })
+        .then(res => {
+            ipBanned = res.data.banned;
+        }).catch(err => {
+            console.error(err);
+            return;
+        })
 
-    console.log(users.length)
-    for (user of users) {
-        for (ip of targetUser.ip) {
-            if (user.ip.indexOf(ip) >= 0 && (user.username_banned || user.ip_banned)) {
-                console.log("Got banned account", user.username, user.username_banned, user.ip_banned, user.ip[0]);
-                bannedUsers.push(user);
+    if (user.internalUsernameBanned && !usernameBanned) {
+        console.log("Database is out of date, updating username ban");
+        updateBannedUser(user.username);
+    } else if (!user.internalUsernameBanned && usernameBanned) {
+        console.log("Website is out of date, issuing username ban.");
+        ws.send(JSON.stringify({
+            e: "INTERNAL_LISTNER_BAN",
+            d: {
+                username: user.username
             }
-        }
+        }))
     }
 
-    if (bannedUsers.length > 0) {
-        console.log(bannedUsers);
-        let str = "\n```";
-        for (let user of bannedUsers) {
-            str += `${user.username}: ${user.username_banned ? "username" : ""} ${user.ip_banned ? "ip" : ""}\n`
-        }
-        str += "\n```";
-        client.channels.get('640601815754473504')
-            .send(`**WARNING!!!** Banned accounts on IP! Possible alt. ${str}`);
-        const embed = new RichEmbed()
-            .setTitle('Possible Alternate Account Detected')
-            .setColor(0xFF0000)
-            .setDescription(`${username} may be a possible alt for ${str}`);
-        client.channels.get('660613570614263819').send(embed);
-    } else {
-        console.log("Not banned! :)");
+    if (user.internalIpBanned && !ipBanned) {
+        console.log("Database is out of date, updating IP ban");
+        updateBannedUser(user.ip);
+    } else if (!user.internalIpBanned && ipBanned) {
+        console.log("Website is out of date, issuing IP ban.");
+        ws.send(JSON.stringify({
+            e: "INTERNAL_LISTNER_BAN",
+            d: {
+                ip: user.ip
+            }
+        }))
     }
+
+    if (!usernameBanned && !ipBanned &&
+        !user.internalIpBanned && !user.internalUsernameBanned) {
+        console.log("No bans to issue or update :)");
+    }
+
 }
-
 
 client.login(settings.token);
