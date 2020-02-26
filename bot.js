@@ -1,3 +1,5 @@
+
+// IMPORTS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const axios = require('axios')
 const { Client, RichEmbed } = require('discord.js')
 const os = require('os');
@@ -5,12 +7,13 @@ const WebSocket = require('ws');
 
 const settings = require('./settings.json');
 
+// GLOBAL VARIABLES >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const client = new Client();
 const ws = new WebSocket(settings.websocket.url);
 let botChangedNickname = false;
 axios.defaults.headers.common['Authorization'] = `Bearer ${settings.api.key}`;
 
-
+// META >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 /**
  * @typedef {Object} WSUser
  * @property {string} username their remo username
@@ -37,8 +40,7 @@ axios.defaults.headers.common['Authorization'] = `Bearer ${settings.api.key}`;
  * @property {boolean} banned if the IP has been banned
  */
 
-
-
+// DISCORD STUFF >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 client.on("ready", () => {
     // All Discord reliant variables need to be initialized here.
 
@@ -73,6 +75,103 @@ client.on("messageDelete", message => {
     doMessageDelete(message);
 })
 
+/**
+ * Checks if the member updating has the "DontBeADooDooHead" role, and reverts
+ * their nickname if they changed it.
+ * 
+ * @async
+ * @param {GuildMember} oldMember member before update
+ * @param {GuildMember} newMember member after update
+ */
+async function doGuildMemberUpdate(oldMember, newMember) {
+    if (!botChangedNickname &&
+        newMember._roles.indexOf('662719620603576322') >= 0 &&
+        oldMember.nickname !== newMember.nickname) {
+
+        console.log("Got unauthed nickname change. Reverting.");
+        botChangedNickname = true;
+        await newMember.setNickname(oldMember.nickname);
+        botChangedNickname = false;
+    }
+}
+
+/**
+ * Send an alert when somebody joins the Discord server.
+ * 
+ * @param {User} user the joining user
+ */
+function doGuildMemberAdd(user) {
+    const embed = new RichEmbed()
+        .setTitle("New Discord user Joined")
+        .setColor(0x00FFFF)
+        .setDescription(
+            `${user.username} joined the server.
+\`\`\`
+tag:        ${user.tag}
+ID:         ${user.id}
+bot:        ${user.bot}
+created:    ${user.createdAt}
+\`\`\``);
+    client.channels.get('660613570614263819').send(embed);
+}
+
+/**
+ * Handles bans in the admin channel.
+ * 
+ * @async
+ * @param {Message} message the message
+ */
+async function handleAdminMessage(message) {
+    const content = message.content;
+
+    // Ban events
+    if (content.includes("?ban" || content.includes("GGK"))) {
+        handleBanEvent(message);
+        if (content.startsWith("?ban")) {
+            const args = content.slice(settings.prefix.length).split(/ +/);
+            if (args[1]) {
+                updateBannedUser(args[1]);
+            }
+        } else if (content.startsWith("?unban")) {
+            const args = content.slice(settings.prefix.length).split(/ +/);
+            if (args[1]) {
+                updateBannedUser(args[1], false);
+            }
+        }
+    }
+}
+
+/**
+ * Pastes  a deleted message into the skeetbot spam channel
+ * 
+ * @param {Message} message the deleted message
+ */
+function doMessageDelete(message) {
+    const channel = message.channel.name;
+    const author = `${message.author.username}#${message.author.discriminator}`;
+    const content = message.content;
+    const embed = new RichEmbed()
+        .setTitle(`Message deleted in #${channel}`)
+        .setColor(0x009999)
+        .setDescription(`${author}\t${content}`);
+
+    client.channels.get('660613570614263819').send(embed);
+}
+/**
+ * Alerts of a possible banned user or when a ban happens via Discord.
+ * 
+ * @param {Message} message 
+ */
+function handleBanEvent(message) {
+    console.log("got ban message or login, sending to skeetbot channel");
+    const embed = new RichEmbed()
+        .setTitle("Got Ban Info")
+        .setColor(0xFF0000)
+        .setDescription(message.content);
+    client.channels.get('660613570614263819').send(embed)
+}
+
+// REMO STUFF >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 ws.onopen = () => {
     ws.send(JSON.stringify({
         e: 'INTERNAL_LISTENER_AUTHENTICATE',
@@ -112,99 +211,11 @@ ws.onmessage = async event => {
         })
     }
 }
-/**
- * Checks if the member updating has the "DontBeADooDooHead" role, and reverts
- * their nickname if they changed it.
- * @param {GuildMember} oldMember member before update
- * @param {GuildMember} newMember member after update
- * @async
- */
-async function doGuildMemberUpdate(oldMember, newMember) {
-    if (!botChangedNickname &&
-        newMember._roles.indexOf('662719620603576322') >= 0 &&
-        oldMember.nickname !== newMember.nickname) {
-
-        console.log("Got unauthed nickname change. Reverting.");
-        botChangedNickname = true;
-        await newMember.setNickname(oldMember.nickname);
-        botChangedNickname = false;
-    }
-}
-
-/**
- * Send an alert when somebody joins the Discord server.
- * @param {User} user the joining user
- */
-function doGuildMemberAdd(user) {
-    const embed = new RichEmbed()
-        .setTitle("New Discord user Joined")
-        .setColor(0x00FFFF)
-        .setDescription(
-            `${user.username} joined the server.
-\`\`\`
-tag:        ${user.tag}
-ID:         ${user.id}
-bot:        ${user.bot}
-created:    ${user.createdAt}
-\`\`\``);
-    client.channels.get('660613570614263819').send(embed);
-}
-
-/**
- * Handles bans in the admin channel.
- * @param {Message} message the message
- */
-async function handleAdminMessage(message) {
-    const content = message.content;
-
-    // Ban events
-    if (content.includes("?ban" || content.includes("GGK"))) {
-        handleBanEvent(message);
-        if (content.startsWith("?ban")) {
-            const args = content.slice(settings.prefix.length).split(/ +/);
-            if (args[1]) {
-                updateBannedUser(args[1]);
-            }
-        } else if (content.startsWith("?unban")) {
-            const args = content.slice(settings.prefix.length).split(/ +/);
-            if (args[1]) {
-                updateBannedUser(args[1], false);
-            }
-        }
-    }
-}
-
-/**
- * Pastes  a deleted message into the skeetbot spam channel
- * @param {Message} message the deleted message
- */
-function doMessageDelete(message) {
-    const channel = message.channel.name;
-    const author = `${message.author.username}#${message.author.discriminator}`;
-    const content = message.content;
-    const embed = new RichEmbed()
-        .setTitle(`Message deleted in #${channel}`)
-        .setColor(0x009999)
-        .setDescription(`${author}\t${content}`);
-
-    client.channels.get('660613570614263819').send(embed);
-}
-
-/**
- * Alerts of a possible banned user or when a ban happens via Discord.
- * @param {Message} message 
- */
-function handleBanEvent(message) {
-    console.log("got ban message or login, sending to skeetbot channel");
-    const embed = new RichEmbed()
-        .setTitle("Got Ban Info")
-        .setColor(0xFF0000)
-        .setDescription(message.content);
-    client.channels.get('660613570614263819').send(embed)
-}
 
 /**
  * Updates a ban on a username or IP
+ * 
+ * @async
  * @param {String} target username or IP to ban
  * @param {boolean} [ban=true] whether to ban or unban. Default = true. true = ban.
  */
@@ -260,6 +271,8 @@ async function updateBannedUser(target, ban = true) {
 /**
  * Updates the last time a user was seen if they exist, otherwise add them to
  * the database.
+ * 
+ * @async
  * @param {WSUser} user the user to update
  */
 async function updateDatabase(user) {
@@ -347,10 +360,16 @@ async function updateDatabase(user) {
             console.error(err);
         });
         client.channels.get('640601815754473504').send(`${user.username} doesn't exist in my database!`);
-        const embed = new RichEmbed()
-            .setTitle("New Remo User")
-            .setColor(0xFFFF00)
-            .setDescription(`${user.username}`);
+        const embed = ` **New Remo User**
+-------------------------------
+**${user.username}**
+cores: ${user.hardwareConcurrency}
+gpu: ${user.renderer}
+user-agent: ${user.userAgent}
+ip: ${user.ip}
+usernameBanned: ${user.internalUsernameBanned}
+ipBanned: ${user.internalIpBanned}
+-------------------------------`
         client.channels.get('660613570614263819').send(embed);
     }
 
@@ -359,6 +378,8 @@ async function updateDatabase(user) {
 
 /**
  * Tests if a user is a possible alt for other banned accounts.
+ * 
+ * @async
  * @param {DBUser} user The user to test for
  */
 async function checkIfBanned(user) {
@@ -414,11 +435,14 @@ ${(bannedIps.length > 0 ? bannedIps : "")}
     }
 }
 
-
-
 /**
  * gets a specific user from the database
+ * 
+ * @async
  * @param {string} user the username to get
+ * @example
+ * const dbUser = await getUserFromDatabase(user.username);
+ * @returns {DBUser | Object[]} the user in the database
  */
 async function getUserFromDatabase(user) {
 
@@ -441,7 +465,13 @@ async function getUserFromDatabase(user) {
 }
 
 /**
+ * Synchronize the bans for the database and the site.
+ * If username banned on the site but not in the database, update the database.
+ * If username banned in the database but not on the site, update the site.
+ * If IP banned on the site but not in the database, update the database.
+ * If IP banned in the database but not on the site, update the site.
  * 
+ * @async
  * @param {WSUser} user connecting user
  */
 async function banSync(user) {
@@ -492,7 +522,7 @@ async function banSync(user) {
 
     if (!usernameBanned && !ipBanned &&
         !user.internalIpBanned && !user.internalUsernameBanned) {
-        console.log("No bans to issue or update :)");
+        console.log("No bans to issue or update", (user.username === "jill" ? ":]" : ":)"));
     }
 
 }
