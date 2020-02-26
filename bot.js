@@ -87,7 +87,6 @@ async function doGuildMemberUpdate(oldMember, newMember) {
     if (!botChangedNickname &&
         newMember._roles.indexOf('662719620603576322') >= 0 &&
         oldMember.nickname !== newMember.nickname) {
-
         console.log("Got unauthed nickname change. Reverting.");
         botChangedNickname = true;
         await newMember.setNickname(oldMember.nickname);
