@@ -65,7 +65,12 @@ client.on("guildMemberAdd", member => {
 
 client.on("message", async message => {
     if (message.channel.name === "remo-admin") {
-        await handleAdminMessage(message);
+        if (message.content.startsWith(`${settings.prefix}nope`)) {
+            const args = message.content.slice(settings.prefix.length).split(/ +/);
+            issueBan(args[1]);
+        } else {
+            await handleAdminMessage(message);
+        }
     }
 })
 
@@ -81,17 +86,19 @@ ws.onopen = () => {
         }
     }));
 
-    // ws.send(JSON.stringify({
-    //     e: 'AUTHENTICATE',
-    //     d: {
-    //         token: settings.websocket.token,
-    //         alt: Buffer.from(JSON.stringify({
-    //             userAgent: 'LED Bot RULZ',
-    //             hardwareConcurrency: '42069',
-    //             renderer: 'your mother'
-    //         })).toString('base64')
-    //     }
-    // }));
+    /* 
+    ws.send(JSON.stringify({
+        e: 'AUTHENTICATE',
+        d: {
+            token: settings.websocket.token,
+            alt: Buffer.from(JSON.stringify({
+                userAgent: 'undefined',
+                hardwareConcurrency: 'undefined',
+                renderer: 'undefined'
+            })).toString('base64')
+        }
+    }));
+    */
     console.log("Logged into Remo");
 }
 
@@ -276,9 +283,9 @@ async function updateDatabase(user) {
             let ipExists = true;
             await axios.get(`${settings.api.url}/api/ip`, { ip: user.ip })
                 .then(res => {
-                    console.log(res.data);
                     if (res.data.length === 0 && res.status === 200) {
                         ipExists = false;
+                        client.channels.get('640601815754473504').send(`${user.ip} is a new IP`);
                     }
                 }).catch(err => {
                     console.error(err);
@@ -322,7 +329,8 @@ async function updateDatabase(user) {
         await axios.post(`${settings.api.url}/api/users/`, {
             username: user.username,
             cores: (isNaN(user.hardwareConcurrency) ? 0 : user.hardwareConcurrency),
-            gpu: user.renderer,
+            // I think an undefined gpu was causing null errors in the API.
+            gpu: user.renderer === undefined ? "" : user.renderer,
             useragent: [user.userAgent],
             username_banned: user.internalUsernameBanned,
             ips: [user.ip],
@@ -346,11 +354,20 @@ async function updateDatabase(user) {
             console.error(err);
         });
         client.channels.get('640601815754473504').send(`${user.username} doesn't exist in my database!`);
-        const embed = new RichEmbed()
+        if (user.internalUsernameBanned || user.internalIpBanned) {
+            client.channels.get('660613570614263819').send(
+                new RichEmbed()
+                .setTitle("New Banned User")
+                .setColor(0x990000)
+                .setDescription(`${user.username} @ ${user.ip}\nuser: ${user.internalUsernameBanned}\nip: ${user.internalIpBanned}`)
+            );
+        } else {
+            const embed = new RichEmbed()
             .setTitle("New Remo User")
             .setColor(0xFFFF00)
-            .setDescription(`${user.username}`);
-        client.channels.get('660613570614263819').send(embed);
+            .setDescription(`${user.username} @ ${user.ip}`);
+            client.channels.get('660613570614263819').send(embed);
+        }
     }
 
     console.log("\n\n");
@@ -405,11 +422,7 @@ ${(bannedIps.length > 0 ? bannedIps : "")}
         client.channels.get('660613570614263819').send(embed);
         client.channels.get('640601815754473504').send(embed);
     } else {
-        if (user.username === "jill") {
-            console.log("Not banned! :]");
-        } else {
-            console.log("Not banned! :)");
-        }
+        console.log("Not banned", user.username === "jill" ? ":]" : ":)");
     }
 }
 
@@ -491,9 +504,29 @@ async function banSync(user) {
 
     if (!usernameBanned && !ipBanned &&
         !user.internalIpBanned && !user.internalUsernameBanned) {
-        console.log("No bans to issue or update :)");
+        console.log("No bans to issue or update", user.username === "jill" ? ":]" : ":)");
     }
 
+}
+
+function issueBan(target) {
+    if (target.indexOf('.') >= 0) {
+        ws.send(JSON.stringify({
+            e: "INTERNAL_LISTENER_BAN",
+            d: {
+                ip: target
+            }
+        }))
+    } else {
+        ws.send(JSON.stringify({
+            e: "INTERNAL_LISTENER_BAN",
+            d: {
+                username: target
+            }
+        }))
+    }
+
+    updateBannedUser(target);
 }
 
 client.login(settings.token);
