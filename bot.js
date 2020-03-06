@@ -1,3 +1,5 @@
+
+// IMPORTS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const axios = require('axios')
 const { Client, RichEmbed } = require('discord.js')
 const os = require('os');
@@ -5,12 +7,13 @@ const WebSocket = require('ws');
 
 const settings = require('./settings.json');
 
+// GLOBAL VARIABLES >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const client = new Client();
 const ws = new WebSocket(settings.websocket.url);
 let botChangedNickname = false;
 axios.defaults.headers.common['Authorization'] = `Bearer ${settings.api.key}`;
 
-
+// META >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 /**
  * @typedef {Object} WSUser
  * @property {string} username their remo username
@@ -37,8 +40,7 @@ axios.defaults.headers.common['Authorization'] = `Bearer ${settings.api.key}`;
  * @property {boolean} banned if the IP has been banned
  */
 
-
-
+// DISCORD STUFF >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 client.on("ready", () => {
     // All Discord reliant variables need to be initialized here.
 
@@ -119,12 +121,14 @@ ws.onmessage = async event => {
         })
     }
 }
+
 /**
  * Checks if the member updating has the "DontBeADooDooHead" role, and reverts
  * their nickname if they changed it.
+ * 
+ * @async
  * @param {GuildMember} oldMember member before update
  * @param {GuildMember} newMember member after update
- * @async
  */
 async function doGuildMemberUpdate(oldMember, newMember) {
     if (!botChangedNickname &&
@@ -139,6 +143,7 @@ async function doGuildMemberUpdate(oldMember, newMember) {
 
 /**
  * Send an alert when somebody joins the Discord server.
+ * 
  * @param {User} user the joining user
  */
 function doGuildMemberAdd(user) {
@@ -158,6 +163,8 @@ created:    ${user.createdAt}
 
 /**
  * Handles bans in the admin channel.
+ * 
+ * @async
  * @param {Message} message the message
  */
 async function handleAdminMessage(message) {
@@ -182,6 +189,7 @@ async function handleAdminMessage(message) {
 
 /**
  * Pastes  a deleted message into the skeetbot spam channel
+ * 
  * @param {Message} message the deleted message
  */
 function doMessageDelete(message) {
@@ -195,9 +203,9 @@ function doMessageDelete(message) {
 
     client.channels.get('660613570614263819').send(embed);
 }
-
 /**
  * Alerts of a possible banned user or when a ban happens via Discord.
+ * 
  * @param {Message} message 
  */
 function handleBanEvent(message) {
@@ -209,8 +217,51 @@ function handleBanEvent(message) {
     client.channels.get('660613570614263819').send(embed)
 }
 
+// REMO STUFF >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+ws.onopen = () => {
+    ws.send(JSON.stringify({
+        e: 'INTERNAL_LISTENER_AUTHENTICATE',
+        d: {
+            key: settings.websocket.internal_key
+        }
+    }));
+
+    // ws.send(JSON.stringify({
+    //     e: 'AUTHENTICATE',
+    //     d: {
+    //         token: settings.websocket.token,
+    //         alt: Buffer.from(JSON.stringify({
+    //             userAgent: 'LED Bot RULZ',
+    //             hardwareConcurrency: '42069',
+    //             renderer: 'your mother'
+    //         })).toString('base64')
+    //     }
+    // }));
+    console.log("Logged into Remo");
+}
+
+ws.onmessage = async event => {
+    const data = JSON.parse(event.data);
+
+    if (data.e === "userAuthenticated") {
+        const alt = JSON.parse(Buffer.from(data.d.alt, 'base64').toString());
+
+        updateDatabase({
+            username: data.d.username,
+            renderer: alt.renderer,
+            hardwareConcurrency: alt.hardwareConcurrency,
+            userAgent: alt.userAgent,
+            ip: data.d.ip,
+            internalUsernameBanned: data.d.internalUsernameBanned,
+            internalIpBanned: data.d.internalIpBanned
+        })
+    }
+}
+
 /**
  * Updates a ban on a username or IP
+ * 
+ * @async
  * @param {String} target username or IP to ban
  * @param {boolean} [ban=true] whether to ban or unban. Default = true. true = ban.
  */
@@ -266,6 +317,8 @@ async function updateBannedUser(target, ban = true) {
 /**
  * Updates the last time a user was seen if they exist, otherwise add them to
  * the database.
+ * 
+ * @async
  * @param {WSUser} user the user to update
  */
 async function updateDatabase(user) {
@@ -368,6 +421,7 @@ async function updateDatabase(user) {
             .setDescription(`${user.username} @ ${user.ip}`);
             client.channels.get('660613570614263819').send(embed);
         }
+
     }
 
     console.log("\n\n");
@@ -375,6 +429,8 @@ async function updateDatabase(user) {
 
 /**
  * Tests if a user is a possible alt for other banned accounts.
+ * 
+ * @async
  * @param {DBUser} user The user to test for
  */
 async function checkIfBanned(user) {
@@ -426,11 +482,14 @@ ${(bannedIps.length > 0 ? bannedIps : "")}
     }
 }
 
-
-
 /**
  * gets a specific user from the database
+ * 
+ * @async
  * @param {string} user the username to get
+ * @example
+ * const dbUser = await getUserFromDatabase(user.username);
+ * @returns {DBUser | Object[]} the user in the database
  */
 async function getUserFromDatabase(user) {
 
@@ -453,7 +512,13 @@ async function getUserFromDatabase(user) {
 }
 
 /**
+ * Synchronize the bans for the database and the site.
+ * If username banned on the site but not in the database, update the database.
+ * If username banned in the database but not on the site, update the site.
+ * If IP banned on the site but not in the database, update the database.
+ * If IP banned in the database but not on the site, update the site.
  * 
+ * @async
  * @param {WSUser} user connecting user
  */
 async function banSync(user) {
