@@ -4,14 +4,44 @@ const axios = require('axios')
 const { Client, RichEmbed } = require('discord.js')
 const os = require('os');
 const WebSocket = require('ws');
+// const winston = require('winston');
 
 const settings = require('./settings.json');
+
+
 
 // GLOBAL VARIABLES >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const client = new Client();
 const ws = new WebSocket(settings.websocket.url);
 let botChangedNickname = false;
 axios.defaults.headers.common['Authorization'] = `Bearer ${settings.api.key}`;
+const adminChannel = "640601815754473504";
+const spamChannel = "660613570614263819";
+client.login(settings.token);
+
+
+// const log = winston.createLogger({
+//     level: 'debug',
+//     format: winston.format.combine(
+//         winston.format.timestamp({
+//             format: 'YYYY-MM-DD HH:mm:ss'
+//         }),
+//         winston.format.errors({ stack: true }),
+//         winston.format.splat(),
+//         winston.format.json()
+//     ),
+//     defaultMeta: { service: 'skeetbot-client' },
+//     transports: [
+//         new winston.transports.File({ filename: 'skeetbot-client-error.log', level: 'error' }),
+//         new winston.transports.File({ filename: 'skeetbot-client-combined.log' }),
+//         new winston.transports.Console({
+//             format: winston.format.combine(
+//                 winston.format.colorize(),
+//                 winston.format.simple()
+//             )
+//         })
+//     ]
+// });
 
 // META >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 /**
@@ -44,7 +74,7 @@ axios.defaults.headers.common['Authorization'] = `Bearer ${settings.api.key}`;
 client.on("ready", () => {
     // All Discord reliant variables need to be initialized here.
 
-    console.log("Attemping Discord Login...");
+    console.warn('Attempting Discord Login...')
 
     client.user.setPresence({
         game: {
@@ -54,7 +84,7 @@ client.on("ready", () => {
         status: "online"
     });
 
-    console.log(`Logged in as ${client.user.tag} on ${os.hostname}`);
+    console.warn(`Logged in as ${client.user.tag} on ${os.hostname}`);
 });
 
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
@@ -70,6 +100,8 @@ client.on("message", async message => {
         if (message.content.startsWith(`${settings.prefix}nope`)) {
             const args = message.content.slice(settings.prefix.length).split(/ +/);
             issueBan(args[1]);
+        } else if (message.content.startsWith(`${settings.prefix}massban`)) {
+            await issueMassBan();
         } else {
             await handleAdminMessage(message);
         }
@@ -80,47 +112,6 @@ client.on("messageDelete", message => {
     doMessageDelete(message);
 })
 
-ws.onopen = () => {
-    ws.send(JSON.stringify({
-        e: 'INTERNAL_LISTENER_AUTHENTICATE',
-        d: {
-            key: settings.websocket.internal_key
-        }
-    }));
-
-    /* 
-    ws.send(JSON.stringify({
-        e: 'AUTHENTICATE',
-        d: {
-            token: settings.websocket.token,
-            alt: Buffer.from(JSON.stringify({
-                userAgent: 'undefined',
-                hardwareConcurrency: 'undefined',
-                renderer: 'undefined'
-            })).toString('base64')
-        }
-    }));
-    */
-    console.log("Logged into Remo");
-}
-
-ws.onmessage = async event => {
-    const data = JSON.parse(event.data);
-
-    if (data.e === "userAuthenticated") {
-        const alt = JSON.parse(Buffer.from(data.d.alt, 'base64').toString());
-
-        updateDatabase({
-            username: data.d.username,
-            renderer: alt.renderer,
-            hardwareConcurrency: alt.hardwareConcurrency,
-            userAgent: alt.userAgent,
-            ip: data.d.ip,
-            internalUsernameBanned: data.d.internalUsernameBanned,
-            internalIpBanned: data.d.internalIpBanned
-        })
-    }
-}
 
 /**
  * Checks if the member updating has the "DontBeADooDooHead" role, and reverts
@@ -134,7 +125,7 @@ async function doGuildMemberUpdate(oldMember, newMember) {
     if (!botChangedNickname &&
         newMember._roles.indexOf('662719620603576322') >= 0 &&
         oldMember.nickname !== newMember.nickname) {
-        console.log("Got unauthed nickname change. Reverting.");
+        console.log('Got unauthed nickname change. Reverting.');
         botChangedNickname = true;
         await newMember.setNickname(oldMember.nickname);
         botChangedNickname = false;
@@ -147,6 +138,7 @@ async function doGuildMemberUpdate(oldMember, newMember) {
  * @param {User} user the joining user
  */
 function doGuildMemberAdd(user) {
+    console.log('new Discord user joined');
     const embed = new RichEmbed()
         .setTitle("New Discord user Joined")
         .setColor(0x00FFFF)
@@ -158,7 +150,7 @@ ID:         ${user.id}
 bot:        ${user.bot}
 created:    ${user.createdAt}
 \`\`\``);
-    client.channels.get('660613570614263819').send(embed);
+    client.channels.get(spamChannel).send(embed);
 }
 
 /**
@@ -193,6 +185,7 @@ async function handleAdminMessage(message) {
  * @param {Message} message the deleted message
  */
 function doMessageDelete(message) {
+    console.log('Discord message deleted')
     const channel = message.channel.name;
     const author = `${message.author.username}#${message.author.discriminator}`;
     const content = message.content;
@@ -201,7 +194,7 @@ function doMessageDelete(message) {
         .setColor(0x009999)
         .setDescription(`${author}\t${content}`);
 
-    client.channels.get('660613570614263819').send(embed);
+    client.channels.get(spamChannel).send(embed);
 }
 /**
  * Alerts of a possible banned user or when a ban happens via Discord.
@@ -214,7 +207,7 @@ function handleBanEvent(message) {
         .setTitle("Got Ban Info")
         .setColor(0xFF0000)
         .setDescription(message.content);
-    client.channels.get('660613570614263819').send(embed)
+    client.channels.get(spamChannel).send(embed)
 }
 
 // REMO STUFF >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -225,26 +218,35 @@ ws.onopen = () => {
             key: settings.websocket.internal_key
         }
     }));
+    setTimeout(() => {
 
-    // ws.send(JSON.stringify({
-    //     e: 'AUTHENTICATE',
-    //     d: {
-    //         token: settings.websocket.token,
-    //         alt: Buffer.from(JSON.stringify({
-    //             userAgent: 'LED Bot RULZ',
-    //             hardwareConcurrency: '42069',
-    //             renderer: 'your mother'
-    //         })).toString('base64')
-    //     }
-    // }));
+        ws.send(JSON.stringify({
+            e: 'AUTHENTICATE',
+            d: {
+                token: settings.websocket.token,
+                alt: Buffer.from(JSON.stringify({
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:74.0) Gecko/20100101 Firefox/74.0',
+                    hardwareConcurrency: '12',
+                    renderer: 'ANGLE (Radeon RX 5500 XT Direct3D11 vs_5_0 ps_5_0)'
+                })).toString('base64')
+            }
+        }));
+    }, 5000);
     console.log("Logged into Remo");
 }
 
 ws.onmessage = async event => {
     const data = JSON.parse(event.data);
 
-    if (data.e === "userAuthenticated") {
+    if (data.e === "chatMessage") {
+        showChatMessage(data.d);
+    } else if (data.e === "userAuthenticated") {
         const alt = JSON.parse(Buffer.from(data.d.alt, 'base64').toString());
+
+        if (data.d.username.indexOf("senseal") >= 0) {
+            issueBan(data.d.username);
+            client.channels.get(adminChannel).send("Got motherfucker, banning.");
+        }
 
         updateDatabase({
             username: data.d.username,
@@ -258,6 +260,28 @@ ws.onmessage = async event => {
     }
 }
 
+async function showChatMessage(data) {
+    const servers = await axios.get("https://remo.tv/api/dev/robot-server/list").then(
+        res => {
+            return res.data;
+        }
+    ).catch(err => {
+        console.error(err);
+        return [];
+    })
+
+    let prepend = "";
+    for (server of servers) {
+        if (server.server_id === data.server_id) {
+            prepend = server.server_name;
+            break;
+        }
+    }
+    if (prepend === "") prepend = "unlisted/private";
+
+    console.log(`(${prepend}) ${data.username}\t| ${data.message}`);
+}
+
 /**
  * Updates a ban on a username or IP
  * 
@@ -266,7 +290,7 @@ ws.onmessage = async event => {
  * @param {boolean} [ban=true] whether to ban or unban. Default = true. true = ban.
  */
 async function updateBannedUser(target, ban = true) {
-    console.log("un/banning", target, ban);
+    console.log("un/banning %s %s", target, ban);
 
 
     if (target.includes('.')) {
@@ -276,8 +300,10 @@ async function updateBannedUser(target, ban = true) {
             banned: ban
         }).then(res => {
             if (res.status === 200) {
-                console.log("IP successfully un/banned:", target, ban);
+                console.log("IP successfully un/banned: %s %s", target, ban);
             }
+        }).catch(err => {
+            client.channels.get(spamChannel).send(`Unhandled error in \`updateBannedUser\` \`\`\`${err}\`\`\``)
         })
     } else {
         // Username
@@ -285,11 +311,14 @@ async function updateBannedUser(target, ban = true) {
         let user = {};
         await axios.get(`${settings.api.url}/api/users/${target}`).then(res => { // and this
             if (res.status === 200) {
-                console.log("Got user", target);
+                console.log(res.data)
                 userFound = true;
                 user = res.data[0];
+                console.log("Got user %s", user.username);
             } else {
-                console.error("Could not get user", target, res.status);
+                console.error("Could not get user %s %s", target, res.status);
+                client.channels.get(adminChannel).send(`Could not find \`${target}\` in my database (${res.status}).`);
+
             }
         })
         if (userFound) {
@@ -303,17 +332,18 @@ async function updateBannedUser(target, ban = true) {
                 last_seen: user.last_seen
             }).then(res => {
                 if (res.status === 200) {
-                    console.log("Successfully updated user", user.username);
+                    console.log("Successfully updated user %s", user.username);
                 } else {
-                    console.log("Something went wrong, got response", res.status);
+                    console.warn("Something went wrong, got response %s", res.status);
+                    client.channels.get(adminChannel).send(`Experienced API error whilst updating ban for \`${user.username}\` (${res.status})`)
                 }
             }).catch(err => {
-                console.error("Error updating banned user", err);
+                console.error("Error updating banned user %s", err);
+
             })
         }
     }
 }
-
 /**
  * Updates the last time a user was seen if they exist, otherwise add them to
  * the database.
@@ -324,6 +354,7 @@ async function updateBannedUser(target, ban = true) {
 async function updateDatabase(user) {
     const lastSeen = new Date();
     const isoString = lastSeen.toISOString();
+    // console.log(user);
 
     const dbUser = await getUserFromDatabase(user.username);
     if (dbUser.username) {
@@ -338,10 +369,11 @@ async function updateDatabase(user) {
                 .then(res => {
                     if (res.data.length === 0 && res.status === 200) {
                         ipExists = false;
-                        client.channels.get('640601815754473504').send(`${user.ip} is a new IP`);
+                        client.channels.get(adminChannel).send(`${user.ip} is a new IP for ${user.username}`);
                     }
                 }).catch(err => {
                     console.error(err);
+                    client.channels.get(spamChannel).send("Experienced API error on line 345")
                 })
             if (!ipExists) {
                 await axios.put(`${settings.api.url}/api/ips`, {
@@ -349,10 +381,12 @@ async function updateDatabase(user) {
                     banned: user.internalIpBanned
                 }).then(res => {
                     if (res.status === 200) {
-                        console.log("Successfully added ip", user.ip)
+                        console.log("Successfully added ip %s", user.ip)
                     }
                 }).catch(err => {
                     console.error(err);
+                    client.channels.get(spamChannel).send("Experienced API error on line 356")
+
                 })
             }
             dbUser.ips.push(user.ip)
@@ -369,9 +403,10 @@ async function updateDatabase(user) {
                 username_banned: dbUser.username_banned
             }).then(res => {
                 if (res.status === 200) {
-                    console.log("Successfully updated user", dbUser.username);
+                    console.log("Successfully updated user %s", dbUser.username);
                 } else {
-                    console.error("Something went wrong...", res)
+                    console.error("Something went wrong...%s", res)
+                    client.channels.get(adminChannel).send(`Something went wrong trying to update \`${dbUser.username}\` (${res.status})`);
                 }
             }).catch(err => {
                 console.error(err);
@@ -390,7 +425,9 @@ async function updateDatabase(user) {
             last_seen: isoString
         }).then(res => {
             if (res.status === 201) {
-                console.log("Successfully added user", user.username)
+                console.log("Successfully added user %s", user.username)
+            } else {
+                client.channels.get(adminChannel).send(`Error adding ${user.username} to my database (${res.status})`)
             }
         }).catch(err => {
             console.error(err);
@@ -401,30 +438,30 @@ async function updateDatabase(user) {
             banned: user.internalIpBanned
         }).then(res => {
             if (res.status === 201) {
-                console.log("Successfully added IP", user.ip);
+                console.log("Successfully added IP %s", user.ip);
+            } else {
+                client.channels.get(adminChannel).send(`Error adding ${user.ip} to my database (${res.status})`);
             }
         }).catch(err => {
             console.error(err);
         });
-        client.channels.get('640601815754473504').send(`${user.username} doesn't exist in my database!`);
+        client.channels.get(adminChannel).send(`${user.username} doesn't exist in my database!`);
         if (user.internalUsernameBanned || user.internalIpBanned) {
-            client.channels.get('660613570614263819').send(
+            client.channels.get(spamChannel).send(
                 new RichEmbed()
-                .setTitle("New Banned User")
-                .setColor(0x990000)
-                .setDescription(`${user.username} @ ${user.ip}\nuser: ${user.internalUsernameBanned}\nip: ${user.internalIpBanned}`)
+                    .setTitle("New Banned User")
+                    .setColor(0x990000)
+                    .setDescription(`${user.username} @ ${user.ip}\nuser: ${user.internalUsernameBanned}\nip: ${user.internalIpBanned}`)
             );
         } else {
             const embed = new RichEmbed()
-            .setTitle("New Remo User")
-            .setColor(0xFFFF00)
-            .setDescription(`${user.username} @ ${user.ip}`);
-            client.channels.get('660613570614263819').send(embed);
+                .setTitle("New Remo User")
+                .setColor(0xFFFF00)
+                .setDescription(`${user.username} @ ${user.ip}`);
+            client.channels.get(spamChannel).send(embed);
         }
 
     }
-
-    console.log("\n\n");
 }
 
 /**
@@ -453,18 +490,22 @@ async function checkIfBanned(user) {
     let bannedIps = [];
     await axios.get(`${settings.api.url}/api/bannedips`)
         .then(res => {
-            for (const ip of user.ips) {
-                for (const bannedIp of res.data) {
-                    if (ip === bannedIp.ip) {
-                        bannedIps.push(ip);
+            if (res.status === 200) {
+                for (const ip of user.ips) {
+                    for (const bannedIp of res.data) {
+                        if (ip === bannedIp.ip) {
+                            bannedIps.push(ip);
+                        }
                     }
                 }
+            } else {
+                client.channels.get(spamChannel).send("Experienced API error on line 468");
             }
         }).catch(err => {
             console.error(err);
         })
     if (bannedUsernames.length > 0 || bannedIps.length > 0) {
-        console.log("Found banned usernames or IPs", bannedUsernames, bannedIps);
+        console.log("Found banned usernames or IPs %s %s", bannedUsernames, bannedIps);
         const embed = new RichEmbed()
             .setTitle("Possible alternate account(s)")
             .setColor(0xFF0000)
@@ -475,10 +516,10 @@ ${(bannedUsernames.length > 0 ? bannedUsernames : "")}
 ${(bannedIps.length > 0 ? bannedIps : "")}
 \`\`\``
             )
-        client.channels.get('660613570614263819').send(embed);
-        client.channels.get('640601815754473504').send(embed);
+        client.channels.get(spamChannel).send(embed);
+        client.channels.get(adminChannel).send(embed);
     } else {
-        console.log("Not banned", user.username === "jill" ? ":]" : ":)");
+        console.log("Not banned %s", user.username === "jill" ? ":]" : ":)");
     }
 }
 
@@ -498,10 +539,10 @@ async function getUserFromDatabase(user) {
     await axios.get(`${settings.api.url}/api/users/${user}`)
         .then(res => {
             if (!res.data[0]) {
-                console.log("Found no users in database with matching username", user);
+                console.log("Found no users in database with matching username %s", user);
                 result = [];
             } else {
-                console.log("Found username", user);
+                console.log("Found username %s", user);
                 result = res.data[0];
             }
         }).catch(err => {
@@ -528,14 +569,22 @@ async function banSync(user) {
     let ipBanned = false;
     await axios.get(`${settings.api.url}/api/users/${user.username}`)
         .then(res => {
-            usernameBanned = res.data.username_banned;
+            if (res.status === 200) {
+                usernameBanned = res.data.username_banned;
+            } else {
+                client.channels.get(spamChannel).send("encountered API failure on line 547")
+            }
         }).catch(err => {
             console.error(err);
             return;
         })
     await axios.get(`${settings.api.url}/api/ip`, { "ip": user.ip })
         .then(res => {
-            ipBanned = res.data.banned;
+            if (res.status === 200) {
+                ipBanned = res.data.banned;
+            } else {
+                client.channels.get(spamChannel).send("encountered API failure on line 558")
+            }
         }).catch(err => {
             console.error(err);
             return;
@@ -546,6 +595,7 @@ async function banSync(user) {
         updateBannedUser(user.username);
     } else if (!user.internalUsernameBanned && usernameBanned) {
         console.log("Website is out of date, issuing username ban.");
+        client.channels.get(adminChannel).send(`Website is out of date, issuing ban for ${user.username}`)
         ws.send(JSON.stringify({
             e: "INTERNAL_LISTNER_BAN",
             d: {
@@ -559,6 +609,7 @@ async function banSync(user) {
         updateBannedUser(user.ip);
     } else if (!user.internalIpBanned && ipBanned) {
         console.log("Website is out of date, issuing IP ban.");
+        client.channels.get(adminChannel).send(`Website is out of date, issuing ban for ${user.ip}`)
         ws.send(JSON.stringify({
             e: "INTERNAL_LISTNER_BAN",
             d: {
@@ -569,9 +620,60 @@ async function banSync(user) {
 
     if (!usernameBanned && !ipBanned &&
         !user.internalIpBanned && !user.internalUsernameBanned) {
-        console.log("No bans to issue or update", user.username === "jill" ? ":]" : ":)");
+        console.log("No bans to issue or update %s", user.username === "jill" ? ":]" : ":)");
     }
 
+}
+
+async function issueMassBan() {
+    const bannedUsers = await axios.get(`${settings.api.url}/api/bannedusers`).then(res => {
+        if (res.status === 200) {
+            return res.data;
+        } else {
+            return [];
+        }
+    }).catch(err => {
+        console.error(err);
+        return [];
+    })
+    const bannedIps = await axios.get(`${settings.api.url}/api/bannedips`).then(res => {
+        if (res.status === 200) {
+            return res.data;
+        } else {
+            return [];
+        }
+    }).catch(err => {
+        console.error(err);
+        return [];
+    })
+
+    client.channels.get(adminChannel).send(`Attempting to issue ${bannedUsers.length + bannedIps.length} bans...`);
+    try {
+
+        for (let user of bannedUsers) {
+            console.log(`Banning ${user.username}`);
+            issueBan(user.username);
+            await sleep(1000)
+        }
+        for (let ip of bannedIps) {
+            console.log(`Banning ${ip.ip}`);
+            issueBan(ip.ip);
+            await sleep(1000);
+        }
+    } catch (e) {
+        console.error(e);
+        client.channels.get(adminChannel).send("Failed!");
+        return;
+    }
+    client.channels.get(adminChannel).send("Success!");
+}
+
+function sleep(ms) {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            resolve()
+        }, ms)
+    })
 }
 
 function issueBan(target) {
@@ -590,8 +692,7 @@ function issueBan(target) {
             }
         }))
     }
-
+    // client.channels.get(adminChannel).send(`Banned ${target}`);
     updateBannedUser(target);
 }
 
-client.login(settings.token);

@@ -2,3 +2,4 @@ node_modules
 .eslintrc.json
 settings.json
 .eslintrc.js
+*.log
