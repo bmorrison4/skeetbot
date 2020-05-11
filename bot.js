@@ -1,7 +1,8 @@
 
 // IMPORTS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const axios = require('axios')
-const { Client, RichEmbed } = require('discord.js')
+const { Client, RichEmbed, MessageAttachment } = require('discord.js')
+const fs = require('fs');
 const os = require('os');
 const WebSocket = require('ws');
 // const winston = require('winston');
@@ -102,6 +103,10 @@ client.on("message", async message => {
             issueBan(args[1]);
         } else if (message.content.startsWith(`${settings.prefix}massban`)) {
             await issueMassBan();
+        // } else if (message.content.startsWith(`${settings.prefix}getbanned`)) {
+        //     getAllServerBanned();
+        // } else if (message.content.startsWith(`${settings.prefix}getchat`)) {
+        //     getChatLog(message.content);
         } else {
             await handleAdminMessage(message);
         }
@@ -210,6 +215,26 @@ function handleBanEvent(message) {
     client.channels.get(spamChannel).send(embed)
 }
 
+/*
+    FUCK IT. I'll make it an API thing i guess.
+*/
+async function getChatLog(message) {
+    // const args = message.slice(settings.prefix.length).split(/ +/);
+    // if (args.length > 1) {
+    //     const date = args[1].split(/\//);
+    //     const filename = `chat_${date[0]}_${date[1]}_${date[2]}.tsv`;
+    //     const attachment = new MessageAttachment(`/home/brooke/chat_log/${filename}`);
+    //     client.channels.get(adminChannel).send(attachment)
+    // } else {
+    //     const date = new Date(Date.now());
+    //     const filename = `chat_${date.getUTCDate() > 10 ? date.getUTCDate() : "0" + date.getUTCDate()}_${date.getUTCMonth() + 1 > 10 ? date.getUTCMonth() + 1 : "0" + (date.getUTCMonth() + 1)}_${date.getUTCFullYear()}.tsv`;
+    //     const attachment = new MessageAttachment(`/home/brooke/chat_log/${filename}`);
+    //     console.log(attachment);
+    //     client.channels.get(adminChannel).send(attachment);
+    // }
+    client.channels.get(adminChannel).send(`you dummy, Brooke gave up on this.`)
+}
+
 // REMO STUFF >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 ws.onopen = () => {
     ws.send(JSON.stringify({
@@ -257,6 +282,12 @@ ws.onmessage = async event => {
             internalUsernameBanned: data.d.internalUsernameBanned,
             internalIpBanned: data.d.internalIpBanned
         })
+    } else if (data.e === "INTERNAL_SEND_BANNED") {
+        if (data.d) {
+            client.channels.get(adminChannel).send(data.d)
+        }
+    } else if (data.e !== "ROBOT_SERVER_UPDATED") {
+        console.log(data)
     }
 }
 
@@ -674,6 +705,13 @@ function sleep(ms) {
             resolve()
         }, ms)
     })
+}
+
+function getAllServerBanned() {
+    ws.send(JSON.stringify({
+        e: "INTERNAL_SEND_BANNED"
+    }))
+
 }
 
 function issueBan(target) {
