@@ -168,7 +168,7 @@ async function handleAdminMessage(message) {
     const content = message.content;
 
     // Ban events
-    if (content.includes("?ban" || content.includes("GGK"))) {
+    if (content.includes("ban")) {
         handleBanEvent(message);
         if (content.startsWith("?ban")) {
             const args = content.slice(settings.prefix.length).split(/ +/);
