@@ -1,7 +1,7 @@
 
 // IMPORTS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 const axios = require('axios')
-const { Client, RichEmbed, MessageAttachment } = require('discord.js')
+const { Client, MessageEmbed } = require('discord.js')
 const fs = require('fs');
 const os = require('os');
 const WebSocket = require('ws');
@@ -144,7 +144,7 @@ async function doGuildMemberUpdate(oldMember, newMember) {
  */
 function doGuildMemberAdd(user) {
     console.log('new Discord user joined');
-    const embed = new RichEmbed()
+    const embed = new MessageEmbed()
         .setTitle("New Discord user Joined")
         .setColor(0x00FFFF)
         .setDescription(
@@ -155,7 +155,7 @@ ID:         ${user.id}
 bot:        ${user.bot}
 created:    ${user.createdAt}
 \`\`\``);
-    client.channels.get(spamChannel).send(embed);
+    client.channels.cache.get(spamChannel).send(embed);
 }
 
 /**
@@ -194,12 +194,12 @@ function doMessageDelete(message) {
     const channel = message.channel.name;
     const author = `${message.author.username}#${message.author.discriminator}`;
     const content = message.content;
-    const embed = new RichEmbed()
+    const embed = new MessageEmbed()
         .setTitle(`Message deleted in #${channel}`)
         .setColor(0x009999)
         .setDescription(`${author}\t${content}`);
 
-    client.channels.get(spamChannel).send(embed);
+    client.channels.cache.get(spamChannel).send(embed);
 }
 /**
  * Alerts of a possible banned user or when a ban happens via Discord.
@@ -208,11 +208,11 @@ function doMessageDelete(message) {
  */
 function handleBanEvent(message) {
     console.log("got ban message or login, sending to skeetbot channel");
-    const embed = new RichEmbed()
+    const embed = new MessageEmbed()
         .setTitle("Got Ban Info")
         .setColor(0xFF0000)
         .setDescription(message.content);
-    client.channels.get(spamChannel).send(embed)
+    client.channels.cache.get(spamChannel).send(embed)
 }
 
 /*
@@ -224,15 +224,15 @@ async function getChatLog(message) {
     //     const date = args[1].split(/\//);
     //     const filename = `chat_${date[0]}_${date[1]}_${date[2]}.tsv`;
     //     const attachment = new MessageAttachment(`/home/brooke/chat_log/${filename}`);
-    //     client.channels.get(adminChannel).send(attachment)
+    //     client.channels.cache.get(adminChannel).send(attachment)
     // } else {
     //     const date = new Date(Date.now());
     //     const filename = `chat_${date.getUTCDate() > 10 ? date.getUTCDate() : "0" + date.getUTCDate()}_${date.getUTCMonth() + 1 > 10 ? date.getUTCMonth() + 1 : "0" + (date.getUTCMonth() + 1)}_${date.getUTCFullYear()}.tsv`;
     //     const attachment = new MessageAttachment(`/home/brooke/chat_log/${filename}`);
     //     console.log(attachment);
-    //     client.channels.get(adminChannel).send(attachment);
+    //     client.channels.cache.get(adminChannel).send(attachment);
     // }
-    client.channels.get(adminChannel).send(`you dummy, Brooke gave up on this.`)
+    client.channels.cache.get(adminChannel).send(`you dummy, Brooke gave up on this.`)
 }
 
 // REMO STUFF >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -270,7 +270,7 @@ ws.onmessage = async event => {
 
         if (data.d.username.indexOf("senseal") >= 0) {
             issueBan(data.d.username);
-            client.channels.get(adminChannel).send("Got motherfucker, banning.");
+            client.channels.cache.get(adminChannel).send("Got motherfucker, banning.");
         }
 
         updateDatabase({
@@ -284,11 +284,15 @@ ws.onmessage = async event => {
         })
     } else if (data.e === "INTERNAL_SEND_BANNED") {
         if (data.d) {
-            client.channels.get(adminChannel).send(data.d)
+            client.channels.cache.get(adminChannel).send(data.d)
         }
     } else if (data.e !== "ROBOT_SERVER_UPDATED") {
         console.log(data)
     }
+}
+
+ws.onclose = () => {
+    console.warn("Websocket closed!!!");
 }
 
 async function showChatMessage(data) {
@@ -334,7 +338,7 @@ async function updateBannedUser(target, ban = true) {
                 console.log("IP successfully un/banned: %s %s", target, ban);
             }
         }).catch(err => {
-            client.channels.get(spamChannel).send(`Unhandled error in \`updateBannedUser\` \`\`\`${err}\`\`\``)
+            client.channels.cache.get(spamChannel).send(`Unhandled error in \`updateBannedUser\` \`\`\`${err}\`\`\``)
         })
     } else {
         // Username
@@ -348,7 +352,7 @@ async function updateBannedUser(target, ban = true) {
                 console.log("Got user %s", user.username);
             } else {
                 console.error("Could not get user %s %s", target, res.status);
-                client.channels.get(adminChannel).send(`Could not find \`${target}\` in my database (${res.status}).`);
+                client.channels.cache.get(adminChannel).send(`Could not find \`${target}\` in my database (${res.status}).`);
 
             }
         })
@@ -366,7 +370,7 @@ async function updateBannedUser(target, ban = true) {
                     console.log("Successfully updated user %s", user.username);
                 } else {
                     console.warn("Something went wrong, got response %s", res.status);
-                    client.channels.get(adminChannel).send(`Experienced API error whilst updating ban for \`${user.username}\` (${res.status})`)
+                    client.channels.cache.get(adminChannel).send(`Experienced API error whilst updating ban for \`${user.username}\` (${res.status})`)
                 }
             }).catch(err => {
                 console.error("Error updating banned user %s", err);
@@ -400,11 +404,11 @@ async function updateDatabase(user) {
                 .then(res => {
                     if (res.data.length === 0 && res.status === 200) {
                         ipExists = false;
-                        client.channels.get(adminChannel).send(`${user.ip} is a new IP for ${user.username}`);
+                        client.channels.cache.get(adminChannel).send(`${user.ip} is a new IP for ${user.username}`);
                     }
                 }).catch(err => {
                     console.error(err);
-                    client.channels.get(spamChannel).send("Experienced API error on line 345")
+                    client.channels.cache.get(spamChannel).send("Experienced API error on line 345")
                 })
             if (!ipExists) {
                 await axios.put(`${settings.api.url}/api/ips`, {
@@ -416,7 +420,7 @@ async function updateDatabase(user) {
                     }
                 }).catch(err => {
                     console.error(err);
-                    client.channels.get(spamChannel).send("Experienced API error on line 356")
+                    client.channels.cache.get(spamChannel).send("Experienced API error on line 356")
 
                 })
             }
@@ -437,7 +441,7 @@ async function updateDatabase(user) {
                     console.log("Successfully updated user %s", dbUser.username);
                 } else {
                     console.error("Something went wrong...%s", res)
-                    client.channels.get(adminChannel).send(`Something went wrong trying to update \`${dbUser.username}\` (${res.status})`);
+                    client.channels.cache.get(adminChannel).send(`Something went wrong trying to update \`${dbUser.username}\` (${res.status})`);
                 }
             }).catch(err => {
                 console.error(err);
@@ -458,7 +462,7 @@ async function updateDatabase(user) {
             if (res.status === 201) {
                 console.log("Successfully added user %s", user.username)
             } else {
-                client.channels.get(adminChannel).send(`Error adding ${user.username} to my database (${res.status})`)
+                client.channels.cache.get(adminChannel).send(`Error adding ${user.username} to my database (${res.status})`)
             }
         }).catch(err => {
             console.error(err);
@@ -471,25 +475,25 @@ async function updateDatabase(user) {
             if (res.status === 201) {
                 console.log("Successfully added IP %s", user.ip);
             } else {
-                client.channels.get(adminChannel).send(`Error adding ${user.ip} to my database (${res.status})`);
+                client.channels.cache.get(adminChannel).send(`Error adding ${user.ip} to my database (${res.status})`);
             }
         }).catch(err => {
             console.error(err);
         });
-        client.channels.get(adminChannel).send(`${user.username} doesn't exist in my database!`);
+        client.channels.cache.get(adminChannel).send(`${user.username} doesn't exist in my database!`);
         if (user.internalUsernameBanned || user.internalIpBanned) {
-            client.channels.get(spamChannel).send(
-                new RichEmbed()
+            client.channels.cache.get(spamChannel).send(
+                new MessageEmbed()
                     .setTitle("New Banned User")
                     .setColor(0x990000)
                     .setDescription(`${user.username} @ ${user.ip}\nuser: ${user.internalUsernameBanned}\nip: ${user.internalIpBanned}`)
             );
         } else {
-            const embed = new RichEmbed()
+            const embed = new MessageEmbed()
                 .setTitle("New Remo User")
                 .setColor(0xFFFF00)
                 .setDescription(`${user.username} @ ${user.ip}`);
-            client.channels.get(spamChannel).send(embed);
+            client.channels.cache.get(spamChannel).send(embed);
         }
 
     }
@@ -530,14 +534,14 @@ async function checkIfBanned(user) {
                     }
                 }
             } else {
-                client.channels.get(spamChannel).send("Experienced API error on line 468");
+                client.channels.cache.get(spamChannel).send("Experienced API error on line 468");
             }
         }).catch(err => {
             console.error(err);
         })
     if (bannedUsernames.length > 0 || bannedIps.length > 0) {
         console.log("Found banned usernames or IPs %s %s", bannedUsernames, bannedIps);
-        const embed = new RichEmbed()
+        const embed = new MessageEmbed()
             .setTitle("Possible alternate account(s)")
             .setColor(0xFF0000)
             .setDescription(
@@ -547,8 +551,8 @@ ${(bannedUsernames.length > 0 ? bannedUsernames : "")}
 ${(bannedIps.length > 0 ? bannedIps : "")}
 \`\`\``
             )
-        client.channels.get(spamChannel).send(embed);
-        client.channels.get(adminChannel).send(embed);
+        client.channels.cache.get(spamChannel).send(embed);
+        client.channels.cache.get(adminChannel).send(embed);
     } else {
         console.log("Not banned %s", user.username === "jill" ? ":]" : ":)");
     }
@@ -603,7 +607,7 @@ async function banSync(user) {
             if (res.status === 200) {
                 usernameBanned = res.data.username_banned;
             } else {
-                client.channels.get(spamChannel).send("encountered API failure on line 547")
+                client.channels.cache.get(spamChannel).send("encountered API failure on line 547")
             }
         }).catch(err => {
             console.error(err);
@@ -614,7 +618,7 @@ async function banSync(user) {
             if (res.status === 200) {
                 ipBanned = res.data.banned;
             } else {
-                client.channels.get(spamChannel).send("encountered API failure on line 558")
+                client.channels.cache.get(spamChannel).send("encountered API failure on line 558")
             }
         }).catch(err => {
             console.error(err);
@@ -626,7 +630,7 @@ async function banSync(user) {
         updateBannedUser(user.username);
     } else if (!user.internalUsernameBanned && usernameBanned) {
         console.log("Website is out of date, issuing username ban.");
-        client.channels.get(adminChannel).send(`Website is out of date, issuing ban for ${user.username}`)
+        client.channels.cache.get(adminChannel).send(`Website is out of date, issuing ban for ${user.username}`)
         ws.send(JSON.stringify({
             e: "INTERNAL_LISTNER_BAN",
             d: {
@@ -640,7 +644,7 @@ async function banSync(user) {
         updateBannedUser(user.ip);
     } else if (!user.internalIpBanned && ipBanned) {
         console.log("Website is out of date, issuing IP ban.");
-        client.channels.get(adminChannel).send(`Website is out of date, issuing ban for ${user.ip}`)
+        client.channels.cache.get(adminChannel).send(`Website is out of date, issuing ban for ${user.ip}`)
         ws.send(JSON.stringify({
             e: "INTERNAL_LISTNER_BAN",
             d: {
@@ -678,7 +682,7 @@ async function issueMassBan() {
         return [];
     })
 
-    client.channels.get(adminChannel).send(`Attempting to issue ${bannedUsers.length + bannedIps.length} bans...`);
+    client.channels.cache.get(adminChannel).send(`Attempting to issue ${bannedUsers.length + bannedIps.length} bans...`);
     try {
 
         for (let user of bannedUsers) {
@@ -693,10 +697,10 @@ async function issueMassBan() {
         }
     } catch (e) {
         console.error(e);
-        client.channels.get(adminChannel).send("Failed!");
+        client.channels.cache.get(adminChannel).send("Failed!");
         return;
     }
-    client.channels.get(adminChannel).send("Success!");
+    client.channels.cache.get(adminChannel).send("Success!");
 }
 
 function sleep(ms) {
@@ -730,7 +734,7 @@ function issueBan(target) {
             }
         }))
     }
-    // client.channels.get(adminChannel).send(`Banned ${target}`);
+    // client.channels.cache.get(adminChannel).send(`Banned ${target}`);
     updateBannedUser(target);
 }
 
